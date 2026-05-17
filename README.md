@@ -1,19 +1,19 @@
 # NDL古典籍OCR 校正支援アプリ  
 # NDL Koten OCR Proofreading Assistant
 
-古典籍デジタルアーカイブのOCRテキストを効率的に校正するための、研究者向けスタンドアロンWebアプリです。  
-A standalone web application for researchers to efficiently proofread OCR text of digitized classical Japanese documents.
+古典籍デジタルアーカイブのOCRテキストなど日本語縦書き史資料を効率的に校正するための、研究者向けスタンドアロンWebアプリです。  
+A standalone web application for researchers to efficiently proofread Japanese vertical-text historical materials, including OCR text from classical document digital archives.
 
 ---
 
 ## 概要 / Overview
 
 **日本語**  
-NDL（国立国会図書館）古典籍デジタルコレクションを対象とした OCR テキスト校正支援ツールです。  
+古典籍デジタルアーカイブをはじめとする日本語縦書き史資料の OCR テキスト校正を支援するツールです。  
 Obsidian Vault 内の Markdown ノートを直接読み書きし、研究語彙辞書との照合・疑義箇所の自動抽出・ページ単位 OCR 実行をブラウザ上から行えます。
 
 **English**  
-A proofreading assistant targeting OCR output from the National Diet Library (NDL) Digital Collections of classical Japanese documents.  
+A proofreading assistant for OCR output from Japanese vertical-text historical materials, including digitized classical document collections such as the NDL Digital Collections.  
 It reads and writes Markdown notes directly inside an Obsidian Vault, offering automatic detection of suspicious characters, vocabulary-dictionary matching, and per-page OCR execution from the browser.
 
 ---
