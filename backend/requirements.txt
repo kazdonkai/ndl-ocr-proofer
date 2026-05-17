@@ -1,0 +1,5 @@
+fastapi
+uvicorn
+pydantic
+python-dotenv
+PyYAML==6.0.3

@@ -1,0 +1,10 @@
+{
+  "id": "ocr-proofer",
+  "name": "OCR Proofer",
+  "version": "0.1.0",
+  "minAppVersion": "1.5.7",
+  "description": "OCR-based proofreading tool for historical Japanese documents",
+  "author": "kazumikaizuka",
+  "authorUrl": "",
+  "isDesktopOnly": true
+}

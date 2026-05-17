@@ -1,0 +1,10 @@
+term,normalized,variants,reading,category,domain,priority,protect,source,approved
+論所,論所,,ろんじょ,法制語,入会研究,0.8,true,auto-ocr,true
+地券,地券,地劵,ちけん,法制語,入会研究,0.9,false,auto-ocr,true
+入会山,入会山,入合山;入會山,いりあいやま,地目,入会研究,0.9,true,auto-ocr,true
+経界,経界,,けいかい,法制語,村落史,0.7,true,auto-ocr,true
+詞訟,訴訟,,そしょう,法制語,入会研究,0.8,true,auto-ocr,true
+秣山,秣山,,まぐさやま,地目,村落史,0.8,true,auto-ocr,true
+炭焼,炭焼,,すみやき,産業,村落史,0.5,true,auto-ocr,true
+入合,入会,,いりあい,法制語,入会研究,0.8,true,auto-ocr,true
+薪秣,薪秣,,しんまぐさ,地目,村落史,0.7,true,auto-ocr,true
