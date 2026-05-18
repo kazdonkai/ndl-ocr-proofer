@@ -1,8 +1,8 @@
 # NDL古典籍OCR 校正支援アプリ  
 # NDL Koten OCR Proofreading Assistant
 
-古典籍デジタルアーカイブのOCRテキストなど日本語縦書き史資料を効率的に校正するための、研究者向けスタンドアロンWebアプリです。  
-A standalone web application for researchers to efficiently proofread Japanese vertical-text historical materials, including OCR text from classical document digital archives.
+古文書・古典籍・旧字体や史料を含む縦書き研究書などの史資料を効率的に校正するための、研究者向けスタンドアロンWebアプリです。  
+This is a standalone web application designed for researchers to efficiently proofread historical materials such as ancient documents, classical texts, and research papers written in vertical format.
 
 ---
 
