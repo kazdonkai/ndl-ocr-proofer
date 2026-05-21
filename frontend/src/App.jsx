@@ -11,7 +11,7 @@ import { usePageView } from './state/usePageView';
 import { useVaultFiles } from './state/useVaultFiles';
 import { useDocumentOpen } from './state/useDocumentOpen';
 
-import { saveDocumentPage } from './services/documentService';
+import { saveDocumentPage, runOcrForDocument as apiRunOcrForDocument, runOcrForPage as apiRunOcrForPage, updateDocumentStatus } from './services/documentService';
 import {
   normalizeCorrections,
   buildExportRows,
@@ -22,6 +22,7 @@ import {
 } from './services/correctionSerializer';
 
 import { getImageUrl } from './utils/imageUrl';
+import { flushToBackend } from './services/learningEventLogger';
 
 function App() {
   // ─── Persistent settings & view preferences ─────────────────────────────
@@ -59,12 +60,18 @@ function App() {
   // ─── Page / view navigation ──────────────────────────────────────────────
   // Receives documentData so totalPages and seamless-scroll effects stay in sync.
   const {
-    viewMode, setViewMode,
+    viewMode, setViewMode: _setViewMode,
     currentPage, setCurrentPage,
     totalPages,
     imageContainerRef, pageBlockRefs,
     handleNextPage, handlePrevPage, handleSeamlessImageClick,
-  } = usePageView(documentData);
+  } = usePageView(documentData, settings.display.viewMode);
+
+  // viewMode 変更時に settings にも永続化する
+  const setViewMode = (mode) => {
+    _setViewMode(mode);
+    updateSetting('display', 'viewMode', mode);
+  };
 
   // Keep the bridge ref in sync with the stable setter after every commit.
   // useLayoutEffect runs synchronously after DOM mutations, ensuring the ref is
@@ -75,8 +82,6 @@ function App() {
   const [isImporting, setIsImporting] = useState(false);
 
   // ─── UI state (not persisted in settings.js) ─────────────────────────────
-  const [fontSize, setFontSize] = useState(1.3);
-  const [lineHeight, setLineHeight] = useState(1.8);
   const [historyLimit, setHistoryLimit] = useState(() => {
     try { return parseInt(localStorage.getItem('ocr_history_limit') || '10', 10); } catch { return 10; }
   });
@@ -85,12 +90,41 @@ function App() {
   const [fileHistory, setFileHistory] = useState(() => {
     try {
       const saved = localStorage.getItem('ocr_file_history');
-      return saved ? JSON.parse(saved) : [];
+      if (!saved) return [];
+      const parsed = JSON.parse(saved);
+      // Deduplicate by basename: keep only first (most recent) occurrence per filename
+      const seen = new Set();
+      return parsed.filter(item => {
+        const name = item.split('/').pop() || item;
+        if (seen.has(name)) return false;
+        seen.add(name);
+        return true;
+      });
     } catch { return []; }
   });
 
+  const [historyDropdownOpen, setHistoryDropdownOpen] = useState(false);
+  const [historyFocusedIndex, setHistoryFocusedIndex] = useState(-1);
+  const [copiedHistoryItem, setCopiedHistoryItem] = useState(null);
+  const historyDropdownRef = useRef(null);
+  const historyListRef = useRef(null);
+
+  const [toast, setToast] = useState(null);
+  const toastTimerRef = useRef(null);
+
   const proofreaderRef = useRef(null);
   const importFileRef = useRef(null);
+  const exportDropdownRef = useRef(null);
+  const [exportDropdownOpen, setExportDropdownOpen] = useState(false);
+
+  // ─── Page jump ───────────────────────────────────────────────────────────
+  const [pageInputValue, setPageInputValue] = useState('1');
+
+  // ─── Bulk OCR state ──────────────────────────────────────────────────────
+  const [ocrBulkState, setOcrBulkState] = useState({
+    isRunning: false, isComplete: false, done: 0, total: 0, failed: [], isInitialFallback: false,
+  });
+  const ocrBulkTimerRef = useRef(null);
 
   // ─── Correction log management ────────────────────────────────────────────
   const handleCorrectionAccepted = (entry, pageNum) => {
@@ -131,21 +165,84 @@ function App() {
   // Thin App-layer wrapper: updates file history then delegates to openDocument.
   // Future entry points (command palette, file-menu) bypass this wrapper and
   // call openDocumentById / openDocumentByPath directly from useDocumentOpen.
+  const handlePageJump = (value) => {
+    const n = parseInt(value, 10);
+    if (!isNaN(n) && n >= 1 && n <= totalPages) {
+      setCurrentPage(n - 1);
+    } else {
+      setPageInputValue(String(currentPage + 1));
+    }
+  };
+
   const handleLoadDocument = (id) => {
-    if (!id) return;
+    if (!id || ocrBulkState.isRunning) return;
     openDocument(id);
     setFileHistory(prev => {
-      const newHistory = [id, ...prev.filter(item => item !== id)].slice(0, 50);
+      const basename = id.split('/').pop() || id;
+      const filtered = prev.filter(item => item !== id && (item.split('/').pop() || item) !== basename);
+      const newHistory = [id, ...filtered].slice(0, 50);
       localStorage.setItem('ocr_file_history', JSON.stringify(newHistory));
       return newHistory;
     });
   };
 
+  const removeFromHistory = (itemToRemove) => {
+    setFileHistory(prev => {
+      const newHistory = prev.filter(item => item !== itemToRemove);
+      localStorage.setItem('ocr_file_history', JSON.stringify(newHistory));
+      return newHistory;
+    });
+  };
+
+  // ─── Toast helper ────────────────────────────────────────────────────────
+  const showToast = (msg) => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    setToast(msg);
+    toastTimerRef.current = setTimeout(() => setToast(null), 3000);
+  };
+
+  // ─── Completion status ───────────────────────────────────────────────────
+  const handleMarkComplete = async () => {
+    if (!documentData) return;
+    const propName = settings.document.statusPropertyName;
+    const targetValue = settings.document.completionStatusValue;
+    if (!window.confirm(
+      `このドキュメントの completion status を ${targetValue} に設定します。\n` +
+      `(property: "${propName}")\n\n続行しますか？`
+    )) return;
+    try {
+      await updateDocumentStatus(docId, propName, targetValue);
+      await reloadDocument();
+      showToast(`Document status → ${targetValue}`);
+    } catch (err) {
+      alert('ステータス更新エラー: ' + err.message);
+    }
+  };
+
+  const handleStatusChange = async (rawValue) => {
+    if (!documentData) return;
+    const propName = settings.document.statusPropertyName;
+    const numVal = Number(rawValue);
+    const value = isNaN(numVal) ? rawValue : numVal;
+    setDocumentData(prev => ({
+      ...prev,
+      frontmatter: { ...(prev.frontmatter || {}), [propName]: value },
+    }));
+    try {
+      await updateDocumentStatus(docId, propName, value);
+      showToast(`status → ${value}`);
+    } catch (err) {
+      await reloadDocument();
+      alert('ステータス更新エラー: ' + err.message);
+    }
+  };
+
   // ─── Save ────────────────────────────────────────────────────────────────
   const handleSave = async () => {
     if (!documentData) return;
+    const savedPageCount = Object.keys(pageEdits).length;
     try {
-      if (Object.keys(pageEdits).length > 0) {
+      if (savedPageCount > 0) {
         for (const [pageNum, editedText] of Object.entries(pageEdits)) {
           const page = parseInt(pageNum, 10);
           if (!Number.isInteger(page) || page < 1) {
@@ -169,7 +266,7 @@ function App() {
       }
       setPageEdits({});
       await reloadDocument();
-      alert('保存しました');
+      showToast(savedPageCount > 0 ? `保存完了 — OCR ${savedPageCount}p + Markdown` : '保存完了 — Markdown');
     } catch (err) {
       console.error('Save error:', err);
       alert('保存エラー: ' + err.message);
@@ -235,7 +332,78 @@ function App() {
     }
   };
 
+  // ─── Bulk OCR ─────────────────────────────────────────────────────────────
+  const runBulkOcr = async () => {
+    if (ocrBulkState.isRunning || isOcrRunning || !documentData) return;
+    const id = docId || documentData.doc_id;
+    if (!id) return;
+
+    if (ocrBulkTimerRef.current) { clearTimeout(ocrBulkTimerRef.current); ocrBulkTimerRef.current = null; }
+
+    const pages = documentData.ocr_pages || [];
+    const hasIndexedImages = pages.some(p => p.image_name);
+
+    if (!hasIndexedImages) {
+      // 初回文書: 既存の一括OCRにフォールバック
+      setOcrBulkState({ isRunning: true, isComplete: false, done: 0, total: 0, failed: [], isInitialFallback: true });
+      try {
+        await apiRunOcrForDocument(id);
+        await reloadDocument();
+      } catch (err) {
+        console.error('Bulk OCR (initial fallback) failed:', err);
+      }
+      setOcrBulkState(s => ({ ...s, isRunning: false, isComplete: true }));
+      ocrBulkTimerRef.current = setTimeout(() => {
+        setOcrBulkState({ isRunning: false, isComplete: false, done: 0, total: 0, failed: [], isInitialFallback: false });
+        ocrBulkTimerRef.current = null;
+      }, 3000);
+      return;
+    }
+
+    // ページ別 OCR (OCRテキスト未取得かつ image_name があるページのみ対象)
+    const targetPages = pages
+      .map((p, i) => ({ pageNum: i + 1, ...p }))
+      .filter(p => !p.ocr_text?.trim() && p.image_name);
+
+    if (targetPages.length === 0) return;
+
+    setOcrBulkState({ isRunning: true, isComplete: false, done: 0, total: targetPages.length, failed: [], isInitialFallback: false });
+
+    const newFailed = [];
+    for (const { pageNum } of targetPages) {
+      try {
+        await apiRunOcrForPage(id, pageNum);
+      } catch {
+        newFailed.push(pageNum);
+      }
+      setOcrBulkState(prev => ({ ...prev, done: prev.done + 1 }));
+    }
+
+    await reloadDocument();
+
+    setOcrBulkState(prev => ({ ...prev, isRunning: false, isComplete: true, failed: newFailed }));
+    ocrBulkTimerRef.current = setTimeout(() => {
+      setOcrBulkState({ isRunning: false, isComplete: false, done: 0, total: 0, failed: [], isInitialFallback: false });
+      ocrBulkTimerRef.current = null;
+    }, 3000);
+  };
+
   // ─── Effects ──────────────────────────────────────────────────────────────
+  // Sync page jump input when currentPage changes externally
+  useEffect(() => { setPageInputValue(String(currentPage + 1)); }, [currentPage]);
+
+  // Cleanup timers on unmount
+  useEffect(() => () => {
+    if (ocrBulkTimerRef.current) clearTimeout(ocrBulkTimerRef.current);
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+  }, []);
+
+  // Reset bulk OCR state when a different document is loaded
+  useEffect(() => {
+    if (ocrBulkTimerRef.current) { clearTimeout(ocrBulkTimerRef.current); ocrBulkTimerRef.current = null; }
+    setOcrBulkState({ isRunning: false, isComplete: false, done: 0, total: 0, failed: [], isInitialFallback: false });
+  }, [documentData?.doc_id]);
+
   useEffect(() => { openDocument(docId); }, []);
 
   useEffect(() => {
@@ -250,6 +418,74 @@ function App() {
     return () => window.removeEventListener('keydown', handler);
   }, [showFileBrowser]);
 
+  // Ref to give document click handler access to current dropdown state
+  // (avoids stale closure; updated synchronously on every render)
+  const historyDropdownOpenRef = useRef(false);
+  useEffect(() => { historyDropdownOpenRef.current = historyDropdownOpen; }, [historyDropdownOpen]);
+
+  // Always-mounted document click handler — no add/remove timing race
+  useEffect(() => {
+    const handler = (e) => {
+      if (!historyDropdownOpenRef.current) return;
+      if (historyDropdownRef.current?.contains(e.target)) return;
+      setHistoryDropdownOpen(false);
+      setHistoryFocusedIndex(-1);
+    };
+    document.addEventListener('click', handler);
+    return () => document.removeEventListener('click', handler);
+  }, []);
+
+  useEffect(() => {
+    if (!exportDropdownOpen) return;
+    const handler = (e) => {
+      if (!exportDropdownRef.current?.contains(e.target)) setExportDropdownOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [exportDropdownOpen]);
+
+  // Scroll focused history item into view on keyboard navigation
+  useEffect(() => {
+    if (!historyDropdownOpen || historyFocusedIndex < 0 || !historyListRef.current) return;
+    const items = historyListRef.current.querySelectorAll('.history-dropdown-item');
+    items[historyFocusedIndex]?.scrollIntoView({ block: 'nearest' });
+  }, [historyFocusedIndex, historyDropdownOpen]);
+
+  // Keyboard navigation for history dropdown
+  const handleHistoryKeyDown = (e) => {
+    if (!historyDropdownOpen) {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        setHistoryDropdownOpen(true);
+        setHistoryFocusedIndex(e.key === 'ArrowDown' ? 0 : displayedHistory.length - 1);
+      }
+      return;
+    }
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      setHistoryDropdownOpen(false);
+      setHistoryFocusedIndex(-1);
+      return;
+    }
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setHistoryFocusedIndex(prev => (prev < displayedHistory.length - 1 ? prev + 1 : 0));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setHistoryFocusedIndex(prev => (prev > 0 ? prev - 1 : displayedHistory.length - 1));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (historyFocusedIndex >= 0 && historyFocusedIndex < displayedHistory.length) {
+        handleLoadDocument(displayedHistory[historyFocusedIndex]);
+        setHistoryDropdownOpen(false);
+        setHistoryFocusedIndex(-1);
+      }
+    }
+  };
+
+
+
   // ─── Derived ──────────────────────────────────────────────────────────────
   const displayedHistory = fileHistory.slice(0, historyLimit);
   const currentImagePath =
@@ -257,7 +493,7 @@ function App() {
     documentData?.image_paths?.[currentPage] ||
     documentData?.image_path;
 
-  const appStyle = { '--font-size': `${fontSize}rem`, '--line-height': lineHeight };
+  const appStyle = { '--font-size': `${settings.display.fontSize}rem`, '--line-height': settings.display.lineHeight };
 
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
@@ -279,46 +515,135 @@ function App() {
               onClick={() => setShowSettings(!showSettings)}
               title="設定"
             >⚙️</button>
-            <input
-              type="text"
-              className="search-input"
-              value={docId}
-              onChange={(e) => setDocId(e.target.value)}
-              placeholder="ファイル名またはパス"
-              list="file-history"
-            />
-            <select
-              className="search-input-history"
-              value=""
-              onChange={(e) => setDocId(e.target.value)}
-              title="履歴から選択"
+            <div className="search-input-wrapper">
+              <input
+                type="text"
+                className="search-input"
+                value={docId}
+                onChange={(e) => setDocId(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleLoadDocument(docId);
+                  if (e.key === 'ArrowDown' && fileHistory.length > 0) {
+                    e.preventDefault();
+                    setHistoryDropdownOpen(true);
+                    setHistoryFocusedIndex(0);
+                  }
+                }}
+                placeholder="ファイル名またはパス"
+              />
+              {docId && (
+                <button
+                  className="search-input-clear"
+                  onClick={() => setDocId('')}
+                  title="クリア"
+                >×</button>
+              )}
+            </div>
+            <div
+              className="history-dropdown-wrapper"
+              ref={historyDropdownRef}
+              onKeyDown={handleHistoryKeyDown}
             >
-              <option value="" disabled hidden>▼</option>
-              {displayedHistory.length === 0
-                ? <option value="" disabled>履歴なし</option>
-                : displayedHistory.map((item, index) => (
-                  <option key={index} value={item}>{item}</option>
-                ))
-              }
-            </select>
-            <datalist id="file-history">
-              {displayedHistory.map((item, index) => <option key={index} value={item} />)}
-            </datalist>
-            <button className="btn" onClick={() => handleLoadDocument(docId)}>読み込み</button>
+              <button
+                className={`search-input-history-btn ${historyDropdownOpen ? 'active' : ''}`}
+                onClick={() => { setHistoryDropdownOpen(v => !v); setHistoryFocusedIndex(-1); }}
+                title="履歴から選択 (↓/↑ キーでナビゲート)"
+                aria-haspopup="listbox"
+                aria-expanded={historyDropdownOpen}
+              >▼</button>
+              {historyDropdownOpen && (
+                <div
+                  className="history-dropdown-list"
+                  ref={historyListRef}
+                  role="listbox"
+                >
+                  {displayedHistory.length === 0
+                    ? <div className="history-dropdown-empty">履歴なし</div>
+                    : displayedHistory.map((item, index) => (
+                      <div
+                        key={index}
+                        className={`history-dropdown-item${historyFocusedIndex === index ? ' history-dropdown-item-focused' : ''}`}
+                        role="option"
+                        aria-selected={historyFocusedIndex === index}
+                        onMouseEnter={() => setHistoryFocusedIndex(index)}
+                      >
+                        <span
+                          className="history-dropdown-item-name"
+                          onClick={() => { handleLoadDocument(item); setHistoryDropdownOpen(false); setHistoryFocusedIndex(-1); }}
+                          onContextMenu={(e) => {
+                            e.preventDefault();
+                            navigator.clipboard.writeText(item);
+                            setCopiedHistoryItem(item);
+                            setTimeout(() => setCopiedHistoryItem(null), 1500);
+                          }}
+                          title={item}
+                        >{copiedHistoryItem === item ? 'コピーしました' : item}</span>
+                        <button
+                          className="history-dropdown-item-remove"
+                          onClick={(e) => { e.stopPropagation(); removeFromHistory(item); }}
+                          title="履歴から削除"
+                          tabIndex={-1}
+                        >×</button>
+                      </div>
+                    ))
+                  }
+                </div>
+              )}
+            </div>
+            <button className="btn" onClick={() => handleLoadDocument(docId)} disabled={ocrBulkState.isRunning}>読み込み</button>
           </div>
 
+          {documentData && (
+            <div
+              className="doc-status-select-wrapper"
+              title={`Document status (property: ${settings.document.statusPropertyName})`}
+            >
+              <span className="doc-status-label">status:</span>
+              <select
+                className="doc-status-select"
+                value={String(documentData.frontmatter?.[settings.document.statusPropertyName] ?? '')}
+                onChange={(e) => handleStatusChange(e.target.value)}
+                disabled={ocrBulkState.isRunning}
+              >
+                <option value="">–</option>
+                {(settings.document.statusOptions || []).map(opt => (
+                  <option key={opt} value={String(opt)}>{opt}</option>
+                ))}
+              </select>
+            </div>
+          )}
           <button className="btn btn-success" onClick={handleSave}>保存</button>
           {documentData && (
+            <button
+              className="btn btn-complete"
+              onClick={handleMarkComplete}
+              title={`Set completion status to ${settings.document.completionStatusValue}`}
+            >Complete</button>
+          )}
+          {documentData && (
             <>
-              <button className="btn" onClick={handleExportJson} title="補正ログをJSONで書き出し">Export JSON</button>
-              <button className="btn" onClick={handleExportCsv} title="補正ログをCSVで書き出し">Export CSV</button>
+              <div className="export-dropdown-wrapper" ref={exportDropdownRef}>
+                <button className="btn" onClick={() => setExportDropdownOpen(v => !v)}>
+                  書き出し ▾
+                </button>
+                {exportDropdownOpen && (
+                  <div className="export-dropdown-menu">
+                    <button className="export-menu-item" onClick={() => { handleExportJson(); setExportDropdownOpen(false); }}>
+                      JSON で書き出し
+                    </button>
+                    <button className="export-menu-item" onClick={() => { handleExportCsv(); setExportDropdownOpen(false); }}>
+                      CSV で書き出し
+                    </button>
+                  </div>
+                )}
+              </div>
               <button
                 className="btn"
                 onClick={() => importFileRef.current?.click()}
                 disabled={isImporting}
                 title="補正ログ（JSON/CSV）を読み込んで補正状態を復元します"
               >
-                {isImporting ? 'Importing...' : 'Import'}
+                {isImporting ? '取込中...' : '取込'}
               </button>
               <input
                 ref={importFileRef}
@@ -340,12 +665,7 @@ function App() {
           <SettingsSidebar
             settings={settings}
             updateSetting={updateSetting}
-            viewMode={viewMode}
-            setViewMode={setViewMode}
-            fontSize={fontSize}
-            setFontSize={setFontSize}
-            lineHeight={lineHeight}
-            setLineHeight={setLineHeight}
+            onViewModeChange={setViewMode}
             historyLimit={historyLimit}
             onHistoryLimitChange={(val) => {
               setHistoryLimit(val);
@@ -358,6 +678,9 @@ function App() {
             isRescanning={vaultFiles.isRescanning}
             rescanNotice={vaultFiles.rescanNotice}
             onVaultRescan={vaultFiles.handleVaultRescan}
+            onExportCsv={() => { handleExportCsv(); setShowSettings(false); }}
+            onExportJson={() => { handleExportJson(); setShowSettings(false); }}
+            onFlushEvents={flushToBackend}
             onClose={() => setShowSettings(false)}
           />
         )}
@@ -448,6 +771,25 @@ function App() {
                       >{i + 1}</button>
                     ))}
                   </div>
+                  <input
+                    type="number"
+                    className="page-jump-input"
+                    min={1}
+                    max={totalPages}
+                    value={pageInputValue}
+                    onChange={(e) => {
+                      setPageInputValue(e.target.value);
+                      const n = parseInt(e.target.value, 10);
+                      if (!isNaN(n) && n >= 1 && n <= totalPages) setCurrentPage(n - 1);
+                    }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+                    onBlur={() => {
+                      const n = parseInt(pageInputValue, 10);
+                      if (isNaN(n) || n < 1 || n > totalPages) setPageInputValue(String(currentPage + 1));
+                    }}
+                    aria-label="ページ番号入力"
+                  />
+                  <span className="page-jump-sep">/ {totalPages}</span>
                   <button
                     className="nav-btn"
                     onClick={() => setCurrentPage(p => Math.min(totalPages - 1, p + 1))}
@@ -463,7 +805,39 @@ function App() {
               <div className="panel-header">
                 EDITOR
                 <span className="doc-title">{documentData.resolved_name}</span>
+                <button
+                  className="btn-bulk-ocr"
+                  onClick={runBulkOcr}
+                  disabled={ocrBulkState.isRunning || isOcrRunning}
+                  title="OCRテキスト未取得のページを一括処理します"
+                >全ページOCR</button>
               </div>
+              {(ocrBulkState.isRunning || ocrBulkState.isComplete) && (
+                <div className="ocr-controls-bar">
+                  {ocrBulkState.isInitialFallback ? (
+                    <span className="ocr-fallback-note">初回文書のため従来の一括OCRにフォールバックします</span>
+                  ) : (
+                    <div className="ocr-progress-track">
+                      <div
+                        className={`ocr-progress-fill${ocrBulkState.isComplete && ocrBulkState.failed.length === 0 ? ' ocr-progress-done' : ''}`}
+                        style={{ width: `${ocrBulkState.total ? (ocrBulkState.done / ocrBulkState.total) * 100 : 0}%` }}
+                      />
+                    </div>
+                  )}
+                  <span className="ocr-progress-status">
+                    {ocrBulkState.isRunning
+                      ? ocrBulkState.isInitialFallback
+                        ? 'OCR実行中...'
+                        : `実行中 ${ocrBulkState.done}/${ocrBulkState.total}ページ`
+                      : '完了'}
+                  </span>
+                  {ocrBulkState.failed.length > 0 && (
+                    <span className="ocr-error-inline">
+                      失敗 {ocrBulkState.failed.length}件: p{ocrBulkState.failed.join(', p')}
+                    </span>
+                  )}
+                </div>
+              )}
               <div className="panel-content">
                 <Proofreader
                   ref={proofreaderRef}
@@ -480,8 +854,8 @@ function App() {
                     }
                     setPageEdits(prev => ({ ...prev, [pageNum]: newOcr }));
                   }}
-                  isOcrRunning={isOcrRunning}
-                  runOcr={runOcr}
+                  isOcrRunning={isOcrRunning || ocrBulkState.isRunning}
+                  runOcr={runBulkOcr}
                   runOcrPage={runOcrPage}
                   onCorrectionAccepted={handleCorrectionAccepted}
                   onRemoveLastCorrection={handleRemoveLastCorrection}
@@ -495,6 +869,8 @@ function App() {
           </>
         )}
       </main>
+
+      {toast && <div className="app-toast">{toast}</div>}
     </div>
   );
 }

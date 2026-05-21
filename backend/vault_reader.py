@@ -71,8 +71,15 @@ class VaultReader:
         wikilinks = re.findall(r'!\[\[(.*?)(?:\|.*?)?\]\]', md_content)
         resolved = []
         for link in wikilinks:
-            # リンク文字列をNFCに正規化して検索
-            name = unicodedata.normalize('NFC', link.split('/')[-1])
+            link_nfc = unicodedata.normalize('NFC', link)
+            # パス区切りがある場合は Vault ルートからのフルパスで解決（ファイル名衝突を回避）
+            if '/' in link_nfc:
+                full_path = self.vault_path / link_nfc
+                if full_path.exists():
+                    resolved.append(full_path)
+                    continue
+            # フォールバック: ファイル名のみで検索
+            name = link_nfc.split('/')[-1]
             if name in self.image_index:
                 resolved.append(self.image_index[name])
         
@@ -113,8 +120,11 @@ class VaultReader:
             md_path = self.name_index.get(query)
         
         # 3. パスインデックスで検索（例: "100/10000001_0016_申渡 減地一件"）
+        # .md 拡張子付きで入力された場合にも対応（例: Obsidian の開いているファイルパスをそのまま貼り付け）
         if not md_path:
             md_path = self.path_index.get(query)
+            if not md_path and query.endswith('.md'):
+                md_path = self.path_index.get(query[:-3])
         
         # 4. 部分一致検索（ファイル名）
         if not md_path:
@@ -125,8 +135,9 @@ class VaultReader:
         
         # 5. 部分一致検索（パス）
         if not md_path:
+            q = query[:-3] if query.endswith('.md') else query
             for path_key in self.path_index:
-                if query in path_key:
+                if q in path_key:
                     md_path = self.path_index[path_key]
                     break
         
@@ -153,16 +164,28 @@ class VaultReader:
         
         # 各ページに画像パスを紐づけ
         for page in ocr_pages:
+            image_link = page.get("image_link", "")
             img_name = page.get("image_name", "")
-            if img_name in self.image_index:
-                try:
-                    page["image_path"] = str(
-                        self.image_index[img_name].relative_to(self.vault_path)
-                    )
-                except:
+            resolved_img = False
+            # フルパスがあれば Vault ルートから直接解決（ファイル名衝突を回避）
+            if image_link and '/' in image_link:
+                full_path = self.vault_path / unicodedata.normalize('NFC', image_link)
+                if full_path.exists():
+                    try:
+                        page["image_path"] = str(full_path.relative_to(self.vault_path))
+                        resolved_img = True
+                    except Exception:
+                        pass
+            if not resolved_img:
+                if img_name in self.image_index:
+                    try:
+                        page["image_path"] = str(
+                            self.image_index[img_name].relative_to(self.vault_path)
+                        )
+                    except Exception:
+                        page["image_path"] = ""
+                else:
                     page["image_path"] = ""
-            else:
-                page["image_path"] = ""
         
         # JSON OCR（旧形式、後方互換）
         json_path = None
@@ -174,6 +197,16 @@ class VaultReader:
             with open(json_path, "r", encoding="utf-8") as f:
                 ocr_json = json.load(f)
 
+        # frontmatter を解析して返す（WikiLink 等の Obsidian 記法はそのまま保持）
+        fm = None
+        if md_content.startswith("---"):
+            try:
+                second = md_content.find("\n---", 3)
+                if second != -1:
+                    fm = yaml.safe_load(md_content[3:second]) or {}
+            except Exception:
+                fm = {}
+
         return {
             "doc_id": query,
             "resolved_name": md_path.stem,
@@ -182,7 +215,8 @@ class VaultReader:
             "image_path": str(image_path.relative_to(self.vault_path)) if image_path else None,
             "image_paths": image_paths_rel,
             "ocr_pages": ocr_pages,
-            "ocr_json": ocr_json
+            "ocr_json": ocr_json,
+            "frontmatter": fm,
         }
 
     @staticmethod
@@ -373,6 +407,72 @@ class VaultReader:
             "total": len(new_paths),
             "added_files": added_files,
         }
+
+    def update_frontmatter_field(self, md_path: str, field_name: str, value) -> None:
+        """
+        frontmatter 内の単一フィールドを安全に更新して保存する。
+        - frontmatter ブロック（--- ... ---）が存在しない場合は新規作成して追加
+        - 行頭完全一致のみ更新（部分キー名・ネストされたキーへの誤マッチなし）
+        - フィールド未存在時は closing --- の直前に追記
+        - save_markdown() 経由でタイムスタンプ付きバックアップを保証
+        """
+        content = self.get_file_content(md_path)
+        new_value_str = str(value)
+
+        if not content.startswith("---"):
+            # frontmatter ブロックが存在しない場合は先頭に新規作成
+            new_content = f"---\n{field_name}: {new_value_str}\n---\n{content}"
+            self.save_markdown(md_path, new_content)
+            return
+
+        # closing '---' を検索（先頭 '---\n' の直後から）
+        second_marker = content.find("\n---", 3)
+        if second_marker == -1:
+            raise ValueError(f"frontmatter が閉じられていません: {md_path}")
+
+        # frontmatter テキスト（'---\n' と '\n---' の間）と残りの本文を分離
+        fm_text = content[4:second_marker]          # '---\n' の直後から
+        rest    = content[second_marker:]           # '\n---' 以降（本文を含む）
+
+        # 行頭完全一致パターン: ^field_name:[ \t]*.*$
+        key_pat = re.compile(
+            rf'^({re.escape(field_name)}):[ \t]*.*$',
+            re.MULTILINE,
+        )
+
+        if key_pat.search(fm_text):
+            # count=1: 同一キーが複数行あっても先頭1件のみ書き換え
+            new_fm = key_pat.sub(f'{field_name}: {new_value_str}', fm_text, count=1)
+        else:
+            # キー未存在: 末尾に追記（末尾改行を整える）
+            new_fm = fm_text.rstrip("\n") + f"\n{field_name}: {new_value_str}\n"
+
+        new_content = f"---\n{new_fm}{rest}"
+        self.save_markdown(md_path, new_content)
+
+    @staticmethod
+    def with_disk_frontmatter(disk_content: str, incoming_content: str) -> str:
+        """
+        フルマークダウン保存時にディスク上の frontmatter を保持するユーティリティ。
+        - disk_content の frontmatter（update_frontmatter_field で更新済みの状態）をそのまま使用
+        - incoming_content の本文（frontmatter 以降）で body を置き換える
+        - disk_content に frontmatter がない場合は incoming_content をそのまま返す
+        """
+        def _fm_end(content):
+            if not content.startswith("---"):
+                return None
+            pos = content.find("\n---", 3)
+            if pos == -1:
+                return None
+            return pos + 4  # "\n---" の長さ分
+
+        disk_end = _fm_end(disk_content)
+        if disk_end is None:
+            return incoming_content
+
+        incoming_end = _fm_end(incoming_content)
+        incoming_body = incoming_content[incoming_end:] if incoming_end is not None else incoming_content
+        return disk_content[:disk_end] + incoming_body
 
     def save_markdown(self, path, content):
         import shutil

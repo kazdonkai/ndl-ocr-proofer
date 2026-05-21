@@ -1,8 +1,176 @@
 import { useState, useEffect, useRef, useMemo, forwardRef, useImperativeHandle } from 'react';
 import './Proofreader.css';
 import { detectCleanupCandidates, applyCleanup, detectCleanupMatches } from '../utils/ocrCleanup.js';
+import { classifyLine, buildIncludedPositions, classifyLines, INITIAL_RULES } from '../utils/lineClassifierDict.js';
+import ProposalsPanel from './ProposalsPanel.jsx';
+import {
+  logParticleNormCancelled,
+  logParticleNormApplied,
+  logManualUndoParticle,
+  logDoctypeSwitched,
+  logSpanSkipped,
+  logSpanRejected,
+  logSpanAccepted,
+} from '../services/learningEventLogger.js';
 
 const DEFAULT_KB = { nextSpan: 'n', prevSpan: 'p', openSpan: 'Enter' };
+
+function getKanaLabel(str) {
+  const hasHiragana = /[ぁ-ゖ]/.test(str);
+  const hasKatakana = /[ァ-ヶ]/.test(str);
+  if (hasHiragana && !hasKatakana) return 'ひらがな';
+  if (hasKatakana && !hasHiragana) return 'カタカナ';
+  return null;
+}
+
+// ── All-hiragana → katakana bulk conversion utilities ────────────────────────
+function countHiraAll(text) {
+  return (text.match(/[ぁ-ん]/g) || []).length;
+}
+
+/** ひらがな文字ごとの出現数集計（上位 N 件をダイアログ表示に使用） */
+function scanHiraAll(text) {
+  const freq = {};
+  for (const c of text) {
+    const code = c.charCodeAt(0);
+    if (code >= 0x3041 && code <= 0x3096) freq[c] = (freq[c] || 0) + 1;
+  }
+  return Object.entries(freq)
+    .map(([hira, count]) => ({ hira, kata: String.fromCharCode(hira.charCodeAt(0) + 0x60), count }))
+    .sort((a, b) => b.count - a.count);
+}
+
+/** 全ひらがな → カタカナ変換を適用 */
+function applyHiraAll(text) {
+  return text.replace(/[ぁ-ん]/g, c => String.fromCharCode(c.charCodeAt(0) + 0x60));
+}
+
+// ── Particle normalization utilities (P6 / line-aware) ───────────────────────
+const _KANJI_KATA_CLS = '[一-龠々ァ-ヶ]';
+const _PARTICLE_DEFS = [
+  { hira: 'に', kata: 'ニ', re: new RegExp(`(?<=${_KANJI_KATA_CLS})(に)(?=${_KANJI_KATA_CLS})`, 'g') },
+  { hira: 'を', kata: 'ヲ', re: new RegExp(`(?<=${_KANJI_KATA_CLS})(を)(?=${_KANJI_KATA_CLS})`, 'g') },
+  { hira: 'は', kata: 'ハ', re: new RegExp(`(?<=${_KANJI_KATA_CLS})(は)(?=${_KANJI_KATA_CLS})`, 'g') },
+];
+
+// Compound expressions where hiragana particles should NOT be converted.
+function _buildExcludedPositions(text) {
+  const excluded = new Set();
+  const pat = /において|における|について|については|につき|にて|にも|には|または|あるいは|はじめ|はなく|はもと|はもちろん|をもって|をめぐって|をめぐる/g;
+  let m;
+  while ((m = pat.exec(text)) !== null) {
+    for (let i = m.index; i < m.index + m[0].length; i++) excluded.add(i);
+  }
+  return excluded;
+}
+
+/**
+ * Scan for particle normalisation candidates, respecting line-level classification.
+ *
+ * Returns:
+ *   {
+ *     particles : [{ hira, kata, count, samples }],
+ *     lineStats : {
+ *       total            : number,   // all lines (including blank)
+ *       included         : number,   // explicit classical indicator
+ *       excluded         : number,   // modern/punctuation indicator (no classical override)
+ *       neutral          : number,   // no indicator — treated as included in classical doc
+ *       excludedLineReasons: [{ linePreview, rules: string[] }],  // up to 5 samples
+ *     }
+ *   }
+ *
+ * "included" lines (status !== 'exclude') have their character positions added
+ * to the scan window. The existing compound-expression exclusion still applies
+ * within included lines.
+ */
+function scanParticleNorm(text, rules = INITIAL_RULES) {
+  const lineData = classifyLines(text, rules);
+  const includedPositions = new Set();
+  let includedCount = 0;
+  let excludedCount = 0;
+  let neutralCount = 0;
+  const excludedLineReasons = [];
+
+  for (const { line, offset, status, matchedExclude } of lineData) {
+    if (status === 'exclude') {
+      excludedCount++;
+      if (excludedLineReasons.length < 5) {
+        excludedLineReasons.push({
+          linePreview: line.length > 22 ? line.slice(0, 22) + '…' : line,
+          rules: matchedExclude
+            .sort((a, b) => b.priority - a.priority)
+            .slice(0, 2)
+            .map(r => r.description),
+        });
+      }
+    } else {
+      if (status === 'include') includedCount++;
+      else neutralCount++;
+      for (let i = 0; i < line.length; i++) includedPositions.add(offset + i);
+    }
+  }
+
+  const phraseExcluded = _buildExcludedPositions(text);
+  const particles = [];
+
+  for (const { hira, kata, re } of _PARTICLE_DEFS) {
+    const pat = new RegExp(re.source, 'g');
+    const hits = [];
+    let m;
+    while ((m = pat.exec(text)) !== null) {
+      if (!phraseExcluded.has(m.index) && includedPositions.has(m.index)) hits.push(m.index);
+    }
+    if (hits.length === 0) continue;
+    const samples = hits.slice(0, 3).map(idx => {
+      const start = Math.max(0, idx - 4);
+      const end = Math.min(text.length, idx + 1 + 4);
+      return text.slice(start, idx) + `【${hira}】` + text.slice(idx + 1, end);
+    });
+    particles.push({ hira, kata, count: hits.length, samples });
+  }
+
+  return {
+    particles,
+    lineStats: {
+      total: lineData.length,
+      included: includedCount,
+      excluded: excludedCount,
+      neutral: neutralCount,
+      excludedLineReasons,
+    },
+  };
+}
+
+function applyParticleNorm(text, rules = INITIAL_RULES) {
+  const includedPositions = buildIncludedPositions(text, rules);
+  const phraseExcluded = _buildExcludedPositions(text);
+  let result = text;
+  for (const { kata, re } of _PARTICLE_DEFS) {
+    const pat = new RegExp(re.source, 'g');
+    result = result.replace(pat, (match, _p1, offset) => {
+      if (phraseExcluded.has(offset) || !includedPositions.has(offset)) return match;
+      return kata;
+    });
+  }
+  return result;
+}
+
+function scanParticleHighlights(text, rules = INITIAL_RULES) {
+  const includedPositions = buildIncludedPositions(text, rules);
+  const phraseExcluded = _buildExcludedPositions(text);
+  const spans = [];
+  for (const { hira, kata, re } of _PARTICLE_DEFS) {
+    const pat = new RegExp(re.source, 'g');
+    let m;
+    while ((m = pat.exec(text)) !== null) {
+      if (!phraseExcluded.has(m.index) && includedPositions.has(m.index)) {
+        spans.push({ id: `particle_${hira}_${m.index}`, start: m.index, end: m.index + m[0].length, hira, kata });
+      }
+    }
+  }
+  return spans.sort((a, b) => a.start - b.start);
+}
+// ────────────────────────────────────────────────────────────────────────
 
 const Proofreader = forwardRef(function Proofreader({ document, currentPage, viewMode, onDocumentChange, onOcrChange, isOcrRunning, runOcr, runOcrPage, onCorrectionAccepted, keybindings = DEFAULT_KB, onNextPage, onPrevPage, onRemoveLastCorrection, onBulkSetPageCorrections }, ref) {
   const [fullContent, setFullContent] = useState(document?.markdown_content || '');
@@ -17,21 +185,68 @@ const Proofreader = forwardRef(function Proofreader({ document, currentPage, vie
   const [keyboardIndex, setKeyboardIndex] = useState(-1);
   // ポップオーバー内で 1-9 で選択中の候補インデックス
   const [popoverCandidateIndex, setPopoverCandidateIndex] = useState(-1);
+  const [blinkingSpanId, setBlinkingSpanId] = useState(null);
   // Undo / Redo 用履歴スタック
   const [historyStack, setHistoryStack] = useState([]);
   const [redoStack, setRedoStack] = useState([]);
   // 表示フィルタ: 'all' | 'uncorrected' | 'corrected'
   const [displayFilter, setDisplayFilter] = useState('all');
 
-  // correction review panel の開閉状態
-  const [reviewPanelOpen, setReviewPanelOpen] = useState(true);
+  // resizable right sidebar
+  const [sidebarWidth, setSidebarWidth] = useState(280);
+  const [sectionsOpen, setSectionsOpen] = useState({ corrections: true, proposals: true });
+  const [activeTab, setActiveTab] = useState('corrections');
+  const [processingDropdownOpen, setProcessingDropdownOpen] = useState(false);
+  const [sectionSplitPx, setSectionSplitPx] = useState(null);
   // 一括補正確認ダイアログ状態 — { suspect_span, candidate, candidateRank, targetSpans } | null
   const [changeAllConfirm, setChangeAllConfirm] = useState(null);
   // ノイズ除去確認ダイアログ状態 — { total, rules } | null
   const [cleanupConfirm, setCleanupConfirm] = useState(null);
+  // P6: ドキュメント種別・助詞正規化状態
+  const [docType, setDocType] = useState('unknown');
+  const [docTypeConfidence, setDocTypeConfidence] = useState(0);
+  const [docTypeSource, setDocTypeSource] = useState('heuristic');
+  // Phase 1-b: 助詞書体スタイルヒント
+  const [documentStyleHints, setDocumentStyleHints] = useState(null);
+  // document-level doc type: classical wins; used as fallback for insufficient_text pages
+  const [documentDocType, setDocumentDocType] = useState('unknown');
+  // ユーザー手動オーバーライド: null | 'modern' | 'classical'
+  const [manualDocType, setManualDocType] = useState(null);
+  // 助詞正規化確認ダイアログ — [{hira, kata, count, samples}] | null
+  const [particleNormConfirm, setParticleNormConfirm] = useState(null);
+  // 助詞ハイライトスパン — 古文書モード時に ocrContent から自動計算
+  const [particleHighlightSpans, setParticleHighlightSpans] = useState([]);
 
   // import 処理中フラグ
   const [isImporting, setIsImporting] = useState(false);
+
+  // manualDocType が最優先。ページ判定が unknown なら文書レベルの型を使う
+  const effectiveDocType = useMemo(() => {
+    if (manualDocType) return manualDocType;
+    if (docType !== 'unknown') return docType;
+    if (documentDocType !== 'unknown') return documentDocType;
+    return 'unknown';
+  }, [manualDocType, docType, documentDocType]);
+
+  // 助詞正規化候補件数: preview/apply と同一ロジックで算出し count と表示の一致を保証 (P1)
+  const particleNormCount = useMemo(
+    () => effectiveDocType === 'classical'
+      ? scanParticleNorm(ocrContent).particles.reduce((n, p) => n + p.count, 0)
+      : 0,
+    [ocrContent, effectiveDocType]
+  );
+
+  // 全ひらがな→カタカナ一括変換: カタカナ優勢文書でのみ件数を算出
+  const hiraAllCount = useMemo(
+    () => documentStyleHints?.particle_script === 'katakana_dominant'
+      ? countHiraAll(ocrContent)
+      : 0,
+    [ocrContent, documentStyleHints]
+  );
+  // 一括変換確認ダイアログ状態 — null | { count, chars: [{hira, kata, count}] }
+  const [hiraAllConfirm, setHiraAllConfirm] = useState(null);
+  // 一括変換ログ — 補正一覧に summary 行として表示する { pageNum, count }[]
+  const [hiraAllNormLog, setHiraAllNormLog] = useState([]);
 
   const textareaRef = useRef(null);
   const highlightLayerRef = useRef(null);
@@ -40,6 +255,21 @@ const Proofreader = forwardRef(function Proofreader({ document, currentPage, vie
   const performUndoRef = useRef(null);
   const performRedoRef = useRef(null);
   const importCorrectionsRef = useRef(null);
+  const popoverOpenedAtRef = useRef(null);
+  const popoverDragOffsetRef = useRef({ x: 0, y: 0 });
+  const popoverIsDraggingRef = useRef(false);
+  // manualDocType auto-trigger 用: ocrContent の最新値を stale closure なしに参照する
+  const ocrContentRef = useRef(ocrContent);
+  // manualDocType の直前値を追跡し modern→classical 遷移のみ検知する
+  const prevManualDocTypeRef = useRef(null);
+  const sidebarRef = useRef(null);
+  const processingDropdownRef = useRef(null);
+  const correctionsRef = useRef(null);
+  const sidebarInnerRef = useRef(null);
+  // particle norm preview open timestamp — for logParticleNormCancelled elapsed calc
+  const particleNormPreviewOpenedAtRef = useRef(null);
+  // debounce timer for re-analysis after manual textarea edits
+  const analyzeDebounceRef = useRef(null);
 
   // writingMode 切替時にスクロール残留値をリセット
   useEffect(() => {
@@ -51,6 +281,16 @@ const Proofreader = forwardRef(function Proofreader({ document, currentPage, vie
     layer.scrollTop = 0;
     layer.scrollLeft = 0;
   }, [writingMode]);
+
+  // cleanup debounce timer on unmount
+  useEffect(() => {
+    return () => {
+      if (analyzeDebounceRef.current) clearTimeout(analyzeDebounceRef.current);
+    };
+  }, []);
+
+  // ocrContentRef を常に最新値に同期（manualDocType 発火時の stale closure 対策）
+  useEffect(() => { ocrContentRef.current = ocrContent; }, [ocrContent]);
 
   // ポップオーバー状態 — { spanId, span, x, y } | null
   const [popover, setPopover] = useState(null);
@@ -102,13 +342,26 @@ const Proofreader = forwardRef(function Proofreader({ document, currentPage, vie
       setPopover(null);
       setHistoryStack([]);
       setRedoStack([]);
+      setDocType('unknown');
+      setDocTypeConfidence(0);
+      setDocTypeSource('heuristic');
+      setDocumentDocType('unknown');
+      // doc切替時: 手動オーバーライドと preview を必ずリセット
+      setManualDocType(null);
+      setParticleNormConfirm(null);
     }
   }, [document?.doc_id]);
 
-  // ページ切替・ドキュメント切替でキーボードナビゲーション位置をリセット
+  // ページ切替・ドキュメント切替でキーボードナビゲーション位置と開いている preview をリセット
   useEffect(() => {
     setKeyboardIndex(-1);
     setPopoverCandidateIndex(-1);
+    setParticleNormConfirm(null);
+    // pending re-analysis from manual edits is no longer relevant after page/doc change
+    if (analyzeDebounceRef.current) {
+      clearTimeout(analyzeDebounceRef.current);
+      analyzeDebounceRef.current = null;
+    }
   }, [document?.doc_id, currentPage]);
 
   // フィルタ変更時もキーボードインデックスをリセット
@@ -153,7 +406,7 @@ const Proofreader = forwardRef(function Proofreader({ document, currentPage, vie
       const response = await fetch('/api/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ markdown_content: text, ocr_json: ocr })
+        body: JSON.stringify({ markdown_content: text, ocr_json: ocr, frontmatter: document?.frontmatter ?? null })
       });
       const data = await response.json();
       if (!preserveContent && (isInitialLoad || mode === 'preview')) {
@@ -164,6 +417,17 @@ const Proofreader = forwardRef(function Proofreader({ document, currentPage, vie
         id: `p${pageNum}_o${r.occurrence_index}_s${r.start}`,
         ...r
       })));
+      // P6: capture doc type and particle normalization info
+      const newDocType = data.doc_type || 'unknown';
+      const newConf = data.doc_type_confidence || 0;
+      setDocType(newDocType);
+      setDocTypeConfidence(newConf);
+      setDocTypeSource(data.doc_type_source || 'heuristic');
+      setDocumentStyleHints(data.document_style_hints ?? null);
+      if (newDocType !== 'unknown') {
+        // classical を優先。同率なら初回判定を維持
+        setDocumentDocType(curr => (newDocType === 'classical' || curr === 'unknown') ? newDocType : curr);
+      }
     } catch (err) {
       console.error(err);
     } finally {
@@ -220,6 +484,7 @@ const Proofreader = forwardRef(function Proofreader({ document, currentPage, vie
         y = Math.max(10, y);
       }
       setPopover({ spanId: span.id, span, x, y });
+      popoverOpenedAtRef.current = Date.now();
       setActiveSpanId(span.id);
       setManualInput('');
       setPopoverCandidateIndex(-1);
@@ -230,8 +495,7 @@ const Proofreader = forwardRef(function Proofreader({ document, currentPage, vie
         // Esc は常に閉じる
         if (e.key === 'Escape') {
           e.preventDefault();
-          setPopover(null);
-          setPopoverCandidateIndex(-1);
+          dismissPopover('escape');
           return;
         }
         // 手動入力欄にフォーカス中は他のポップオーバーショートカットを無効化
@@ -296,6 +560,23 @@ const Proofreader = forwardRef(function Proofreader({ document, currentPage, vie
     return () => window.removeEventListener('keydown', handler);
   }, [mode, popover, filteredSpans, keyboardIndex, popoverCandidateIndex, writingMode, keybindings, onNextPage, onPrevPage]);
 
+  // ポップオーバードラッグ — ヘッダーを掴んで移動できる
+  // isDragging / offset を ref で管理し、mousemove ごとに setPopover だけ呼ぶ（re-render は最小限）
+  useEffect(() => {
+    const onMove = (e) => {
+      if (!popoverIsDraggingRef.current) return;
+      const { x: ox, y: oy } = popoverDragOffsetRef.current;
+      setPopover(prev => prev ? { ...prev, x: e.clientX - ox, y: e.clientY - oy } : null);
+    };
+    const onUp = () => { popoverIsDraggingRef.current = false; };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+  }, []);
+
   // Ctrl+Z (Undo) / Ctrl+Shift+Z (Redo) — ref 経由で常に最新の関数を呼ぶ
   useEffect(() => {
     const handler = (e) => {
@@ -311,12 +592,50 @@ const Proofreader = forwardRef(function Proofreader({ document, currentPage, vie
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, []);
+
+  useEffect(() => {
+    if (!processingDropdownOpen) return;
+    const handler = (e) => {
+      if (!processingDropdownRef.current?.contains(e.target)) setProcessingDropdownOpen(false);
+    };
+    window.document.addEventListener('mousedown', handler);
+    return () => window.document.removeEventListener('mousedown', handler);
+  }, [processingDropdownOpen]);
   // ────────────────────────────────────────────────────────────────────────
 
   const handleTextChange = (e) => {
     const val = e.target.value;
     if (mode === 'preview') {
+      const oldText = ocrContent;
+
+      // Locate the edit region by finding common prefix and suffix lengths.
+      // This lets us shift spans that lie after the edit without a full re-parse.
+      let editStart = 0;
+      const minLen = Math.min(oldText.length, val.length);
+      while (editStart < minLen && oldText[editStart] === val[editStart]) editStart++;
+
+      let oldEnd = oldText.length;
+      let newEnd = val.length;
+      while (oldEnd > editStart && newEnd > editStart && oldText[oldEnd - 1] === val[newEnd - 1]) {
+        oldEnd--;
+        newEnd--;
+      }
+      const delta = newEnd - oldEnd; // positive = inserted, negative = deleted
+
+      // Shift spans after the edit; drop spans that overlap the changed region.
+      const newSpans = analyzedSpans.reduce((acc, sp) => {
+        if (sp.end <= editStart) {
+          acc.push(sp);
+        } else if (sp.start >= oldEnd) {
+          acc.push({ ...sp, start: sp.start + delta, end: sp.end + delta });
+        }
+        // spans overlapping [editStart, oldEnd) are invalidated — omit them
+        return acc;
+      }, []);
+
       setOcrContent(val);
+      setAnalyzedSpans(newSpans);
+
       const pageNum = currentPage + 1; // 常に 1-indexed
       if (!Number.isInteger(pageNum) || pageNum < 1) {
         setInputError(`無効なページ番号 (${pageNum}) のため保存できません`);
@@ -324,6 +643,12 @@ const Proofreader = forwardRef(function Proofreader({ document, currentPage, vie
       }
       setInputError(null);
       if (onOcrChange) onOcrChange(val, pageNum);
+
+      // Debounce re-analysis so markers refresh after the user pauses typing (1.5 s).
+      if (analyzeDebounceRef.current) clearTimeout(analyzeDebounceRef.current);
+      analyzeDebounceRef.current = setTimeout(() => {
+        analyzeText(val, document?.ocr_json, false, true);
+      }, 1500);
     } else {
       setFullContent(val);
       if (onDocumentChange) onDocumentChange(val);
@@ -361,12 +686,59 @@ const Proofreader = forwardRef(function Proofreader({ document, currentPage, vie
     }
 
     setPopover({ spanId: span.id, span, x, y });
+    popoverOpenedAtRef.current = Date.now();
     setActiveSpanId(span.id);
     setManualInput('');
     setPopoverCandidateIndex(-1);
     // マウスクリック時もキーボードインデックスを同期しておく（続けて n/p ナビできるように）
     const idx = filteredSpans.findIndex(s => s.id === span.id);
     if (idx >= 0) setKeyboardIndex(idx);
+  };
+
+  // 候補未選択でポップオーバーを閉じる（skip ログ付き）
+  // trigger: "overlay" | "close_btn" | "escape" | "reject"
+  const dismissPopover = (trigger = 'overlay') => {
+    if (popover && !acceptedCorrections[popover.spanId]) {
+      const popoverOpenMs = popoverOpenedAtRef.current != null
+        ? Date.now() - popoverOpenedAtRef.current
+        : null;
+      logSpanSkipped({
+        docId: document?.doc_id ?? '',
+        spanId: popover.spanId,
+        suspectSpan: popover.span.suspect_span,
+        isDangerous: popover.span.is_dangerous ?? false,
+        popoverOpenMs,
+        dismissTrigger: trigger,
+        candidatesViewed: popover.span.candidates?.length ?? 0,
+      });
+    }
+    setPopover(null);
+    setPopoverCandidateIndex(-1);
+  };
+
+  // top1 候補の却下: 補正は適用せず、ログのみ記録してポップオーバーを閉じる
+  // reject_target は常に "top1"（span全体の否定ではなく、先頭候補1件の却下）
+  const handleRejectTop1 = () => {
+    if (!popover) return;
+    const candidates = popover.span.candidates || [];
+    const top1 = candidates[0] ?? null;
+    logSpanRejected({
+      docId: document?.doc_id ?? '',
+      spanId: popover.spanId,
+      suspectSpan: popover.span.suspect_span,
+      isDangerous: popover.span.is_dangerous ?? false,
+      rejectedCandidate: top1,
+      tier: null,
+    });
+    dismissPopover('reject');
+  };
+
+  // ポップオーバーヘッダーのドラッグ開始
+  const handlePopoverDragStart = (e) => {
+    if (e.target.closest('.btn-icon')) return; // ×ボタン上では発火しない
+    e.preventDefault();
+    popoverDragOffsetRef.current = { x: e.clientX - popover.x, y: e.clientY - popover.y };
+    popoverIsDraggingRef.current = true;
   };
 
   // P5: offset ベース置換 — popover.span.start/end を使い該当1箇所だけを置換する
@@ -377,11 +749,31 @@ const Proofreader = forwardRef(function Proofreader({ document, currentPage, vie
     const newOcr = ocrContent.slice(0, start) + candidate + ocrContent.slice(end);
     const delta = candidate.length - (end - start);
 
-    const newSpans = analyzedSpans.map(sp => {
-      if (sp.id === popover.spanId) return { ...sp, end: start + candidate.length };
-      if (sp.start >= end) return { ...sp, start: sp.start + delta, end: sp.end + delta };
-      return sp;
+    logSpanAccepted({
+      docId: document?.doc_id ?? '',
+      spanId: popover.spanId,
+      suspectSpan: popover.span.suspect_span,
+      chosenCandidate: candidate,
+      candidateList: popover.span.candidates ?? [],
+      wasBigramSuspect: popover.span.is_bigram_suspect ?? false,
+      particleScript: documentStyleHints?.particle_script ?? null,
+      dismissedDangerFlag: (popover.span.is_dangerous ?? false) && candidateRank !== -1,
+      candidateRank,
+      hintSource: popover.span.soft_hint_candidates?.[candidate] ?? null,
     });
+
+    const newSpans = analyzedSpans
+      .filter(sp => {
+        if (sp.id === popover.spanId) return candidate !== '';
+        // 削除時: 削除範囲内に収まるサブスパンも除去 (別検出器の重複スパンによるずれを防止)
+        if (candidate === '' && sp.start >= start && sp.end <= end) return false;
+        return true;
+      })
+      .map(sp => {
+        if (sp.id === popover.spanId) return { ...sp, end: start + candidate.length };
+        if (sp.start >= end) return { ...sp, start: sp.start + delta, end: sp.end + delta };
+        return sp;
+      });
     const newAccepted = { ...acceptedCorrections, [popover.spanId]: candidate };
     const newCache = { ...pageOcrTextCache, [currentPage]: newOcr };
     const newSpansCache = { ...pageAnalyzedSpansCache, [currentPage]: newSpans };
@@ -451,11 +843,17 @@ const Proofreader = forwardRef(function Proofreader({ document, currentPage, vie
       const { start, end } = live;
       const delta = candidate.length - (end - start);
       workOcr = workOcr.slice(0, start) + candidate + workOcr.slice(end);
-      workSpans = workSpans.map(sp => {
-        if (sp.id === live.id) return { ...sp, end: start + candidate.length };
-        if (sp.start >= end) return { ...sp, start: sp.start + delta, end: sp.end + delta };
-        return sp;
-      });
+      workSpans = workSpans
+        .filter(sp => {
+          if (sp.id === live.id) return candidate !== '';
+          if (candidate === '' && sp.start >= start && sp.end <= end) return false;
+          return true;
+        })
+        .map(sp => {
+          if (sp.id === live.id) return { ...sp, end: start + candidate.length };
+          if (sp.start >= end) return { ...sp, start: sp.start + delta, end: sp.end + delta };
+          return sp;
+        });
       workAccepted = { ...workAccepted, [live.id]: candidate };
       correctionEntries.push({
         spanId: live.id,
@@ -566,6 +964,150 @@ const Proofreader = forwardRef(function Proofreader({ document, currentPage, vie
   };
   // ────────────────────────────────────────────────────────────────────────
 
+  // 古文書モード時に ocrContent が変わるたびに助詞ハイライトを再計算
+  useEffect(() => {
+    if (mode === 'preview' && effectiveDocType === 'classical') {
+      setParticleHighlightSpans(scanParticleHighlights(ocrContent));
+    } else {
+      setParticleHighlightSpans([]);
+    }
+  }, [ocrContent, effectiveDocType, mode]);
+
+  // ─── Doc type badge toggle ────────────────────────────────────────────────
+  const handleDocTypeBadgeClick = () => {
+    if (effectiveDocType === 'modern') {
+      setManualDocType('classical');
+      logDoctypeSwitched({ docId: document?.doc_id ?? '', prevType: 'modern', newType: 'classical', confidence: docTypeConfidence });
+    } else if (effectiveDocType === 'classical') {
+      setManualDocType('modern');
+      logDoctypeSwitched({ docId: document?.doc_id ?? '', prevType: 'classical', newType: 'modern', confidence: docTypeConfidence });
+    }
+  };
+
+  // modern → classical へ手動切替したときに助詞統一 preview を自動で開く
+  useEffect(() => {
+    if (manualDocType !== 'classical') {
+      prevManualDocTypeRef.current = manualDocType;
+      return;
+    }
+    const prev = prevManualDocTypeRef.current;
+    prevManualDocTypeRef.current = 'classical';
+    // 遷移が classical→classical（再マウントなど）でなければ発火
+    if (prev !== 'classical') {
+      const result = scanParticleNorm(ocrContentRef.current);
+      if (result.particles.length > 0) {
+        particleNormPreviewOpenedAtRef.current = Date.now();
+        setParticleNormConfirm(result);
+      }
+      // 候補 0 件の場合は何もしない（要件 3）
+    }
+  }, [manualDocType]);
+  // ────────────────────────────────────────────────────────────────────────
+
+  // ─── Particle Normalization ──────────────────────────────────────────────
+  const handleParticleNormPreview = () => {
+    const result = scanParticleNorm(ocrContent);
+    particleNormPreviewOpenedAtRef.current = Date.now();
+    setParticleNormConfirm(result);
+  };
+
+  const handleParticleNormCancel = () => {
+    const matchCount = particleNormConfirm?.particles?.reduce((n, p) => n + p.count, 0) ?? 0;
+    logParticleNormCancelled({
+      docId: document?.doc_id ?? '',
+      docType: effectiveDocType,
+      matchCount,
+      previewOpenedAt: particleNormPreviewOpenedAtRef.current,
+    });
+    setParticleNormConfirm(null);
+  };
+
+  const executeParticleNorm = () => {
+    if (!particleNormConfirm) return;
+    const pageNum = currentPage + 1;
+    const newOcr = applyParticleNorm(ocrContent);
+
+    const pagePrefix = `p${pageNum}_`;
+    const newAccepted = Object.fromEntries(
+      Object.entries(acceptedCorrections).filter(([key]) => !key.startsWith(pagePrefix))
+    );
+    const newCache = { ...pageOcrTextCache, [currentPage]: newOcr };
+    const newSpansCache = { ...pageAnalyzedSpansCache, [currentPage]: [] };
+
+    setHistoryStack(prev => [...prev, {
+      before: { ocrContent, analyzedSpans, acceptedCorrections, pageOcrTextCache, pageAnalyzedSpansCache },
+      after: { ocrContent: newOcr, analyzedSpans: [], acceptedCorrections: newAccepted, pageOcrTextCache: newCache, pageAnalyzedSpansCache: newSpansCache },
+      page: currentPage,
+      pageNum,
+      isParticleNorm: true,
+    }]);
+    setRedoStack([]);
+
+    setOcrContent(newOcr);
+    setAnalyzedSpans([]);
+    setAcceptedCorrections(newAccepted);
+    setPageOcrTextCache(newCache);
+    setPageAnalyzedSpansCache(newSpansCache);
+
+    if (Number.isInteger(pageNum) && pageNum >= 1) {
+      if (onOcrChange) onOcrChange(newOcr, pageNum);
+    }
+    analyzeText(newOcr, document?.ocr_json, false, true);
+
+    logParticleNormApplied({
+      docId: document?.doc_id ?? '',
+      docType: effectiveDocType,
+      matchCount: particleNormCount,
+    });
+    setParticleNormConfirm(null);
+    setPopover(null);
+  };
+  // ────────────────────────────────────────────────────────────────────────
+
+  // ─── 全ひらがな→カタカナ一括変換 ──────────────────────────────────────────
+  const handleHiraAllNormPreview = () => {
+    const chars = scanHiraAll(ocrContent);
+    setHiraAllConfirm({ count: chars.reduce((n, c) => n + c.count, 0), chars });
+  };
+
+  const executeHiraAllNorm = () => {
+    if (!hiraAllConfirm) return;
+    const pageNum = currentPage + 1;
+    const convertedCount = hiraAllConfirm.count;
+    const newOcr = applyHiraAll(ocrContent);
+    const pagePrefix = `p${pageNum}_`;
+    const newAccepted = Object.fromEntries(
+      Object.entries(acceptedCorrections).filter(([key]) => !key.startsWith(pagePrefix))
+    );
+    const newCache = { ...pageOcrTextCache, [currentPage]: newOcr };
+    const newSpansCache = { ...pageAnalyzedSpansCache, [currentPage]: [] };
+
+    setHistoryStack(prev => [...prev, {
+      before: { ocrContent, analyzedSpans, acceptedCorrections, pageOcrTextCache, pageAnalyzedSpansCache },
+      after: { ocrContent: newOcr, analyzedSpans: [], acceptedCorrections: newAccepted, pageOcrTextCache: newCache, pageAnalyzedSpansCache: newSpansCache },
+      page: currentPage,
+      pageNum,
+      isHiraAllNorm: true,
+      hiraAllCount: convertedCount,
+    }]);
+    setRedoStack([]);
+    setHiraAllNormLog(prev => [...prev, { pageNum, count: convertedCount }]);
+
+    setOcrContent(newOcr);
+    setAnalyzedSpans([]);
+    setAcceptedCorrections(newAccepted);
+    setPageOcrTextCache(newCache);
+    setPageAnalyzedSpansCache(newSpansCache);
+
+    if (Number.isInteger(pageNum) && pageNum >= 1) {
+      if (onOcrChange) onOcrChange(newOcr, pageNum);
+    }
+    analyzeText(newOcr, document?.ocr_json, false, true);
+    setHiraAllConfirm(null);
+    setPopover(null);
+  };
+  // ────────────────────────────────────────────────────────────────────────
+
   // ─── Undo / Redo ────────────────────────────────────────────────────────
   const performUndo = () => {
     if (historyStack.length === 0) return;
@@ -604,6 +1146,14 @@ const Proofreader = forwardRef(function Proofreader({ document, currentPage, vie
         (entry.cleanupSpanIds || []).forEach(spanId => {
           if (onRemoveLastCorrection) onRemoveLastCorrection(entry.pageNum, spanId);
         });
+      } else if (entry.isParticleNorm) {
+        // particle norm adds no individual corrections — nothing to remove
+        logManualUndoParticle({ docId: document?.doc_id ?? '', docType: effectiveDocType, pageNum: entry.pageNum });
+      } else if (entry.isHiraAllNorm) {
+        setHiraAllNormLog(prev => {
+          const idx = prev.map(e => e.pageNum).lastIndexOf(entry.pageNum);
+          return idx === -1 ? prev : prev.filter((_, i) => i !== idx);
+        });
       } else {
         if (onRemoveLastCorrection) onRemoveLastCorrection(entry.pageNum, entry.spanId);
       }
@@ -623,7 +1173,7 @@ const Proofreader = forwardRef(function Proofreader({ document, currentPage, vie
     if (entry.page === currentPage) {
       setOcrContent(entry.after.ocrContent);
       setAnalyzedSpans(entry.after.analyzedSpans);
-      if (entry.isCleanup) {
+      if (entry.isCleanup || entry.isParticleNorm || entry.isHiraAllNorm) {
         analyzeText(entry.after.ocrContent, document?.ocr_json, false, true);
       }
     }
@@ -640,6 +1190,10 @@ const Proofreader = forwardRef(function Proofreader({ document, currentPage, vie
         (entry.cleanupEntries || []).forEach(e => {
           if (onCorrectionAccepted) onCorrectionAccepted(e, entry.pageNum);
         });
+      } else if (entry.isParticleNorm) {
+        // particle norm adds no individual corrections — nothing to notify
+      } else if (entry.isHiraAllNorm) {
+        setHiraAllNormLog(prev => [...prev, { pageNum: entry.pageNum, count: entry.hiraAllCount ?? 0 }]);
       } else if (entry.isBatch) {
         entry.correctionEntries.forEach(ce => {
           if (onCorrectionAccepted) onCorrectionAccepted(ce, entry.pageNum);
@@ -866,6 +1420,8 @@ const Proofreader = forwardRef(function Proofreader({ document, currentPage, vie
     setActiveSpanId(spanId);
     const idx = filteredSpans.findIndex(s => s.id === spanId);
     if (idx >= 0) setKeyboardIndex(idx);
+    setBlinkingSpanId(spanId);
+    setTimeout(() => setBlinkingSpanId(null), 1800);
   };
 
   const handleScroll = (e) => {
@@ -888,9 +1444,20 @@ const Proofreader = forwardRef(function Proofreader({ document, currentPage, vie
     let cursor = 0;
     const visibleIds = new Set(filteredSpans.map(sp => sp.id));
 
-    for (const span of analyzedSpans) {
+    // analyzedSpans を優先し、助詞ハイライトをマージ（同位置は analyzed が勝つ）
+    const combined = [
+      ...analyzedSpans.map(sp => ({ ...sp, _type: 'analyzed' })),
+      ...particleHighlightSpans.map(sp => ({ ...sp, _type: 'particle' })),
+    ].sort((a, b) => {
+      if (a.start !== b.start) return a.start - b.start;
+      return a._type === 'analyzed' ? -1 : 1;
+    });
+
+    for (const span of combined) {
       const spanStart = span.start;
-      const spanEnd = span.end || (span.start + span.suspect_span.length);
+      const spanEnd = span._type === 'particle'
+        ? span.end
+        : (span.end || (span.start + span.suspect_span.length));
 
       // skip overlapping or out-of-order spans
       if (spanStart < cursor) continue;
@@ -899,7 +1466,18 @@ const Proofreader = forwardRef(function Proofreader({ document, currentPage, vie
         elements.push(<span key={`t_${cursor}`}>{content.slice(cursor, spanStart)}</span>);
       }
 
-      if (visibleIds.has(span.id)) {
+      if (span._type === 'particle') {
+        elements.push(
+          <span
+            key={span.id}
+            data-span-id={span.id}
+            className="highlight-particle"
+            title={`助詞統一候補: ${span.hira} → ${span.kata}`}
+          >
+            {content.slice(spanStart, spanEnd)}
+          </span>
+        );
+      } else if (visibleIds.has(span.id)) {
         elements.push(
           <span
             key={span.id}
@@ -907,8 +1485,10 @@ const Proofreader = forwardRef(function Proofreader({ document, currentPage, vie
             className={[
               'highlight-span',
               activeSpanId === span.id ? 'highlight-active' : '',
-              acceptedCorrections[span.id] ? 'highlight-corrected' : '',
+              acceptedCorrections[span.id] !== undefined ? 'highlight-corrected' : '',
               span.is_protected ? 'highlight-protected' : '',
+              acceptedCorrections[span.id] === undefined && span.is_dangerous ? 'highlight-dangerous' : '',
+              blinkingSpanId === span.id ? 'highlight-blink' : '',
             ].filter(Boolean).join(' ')}
             onClick={(e) => handleSpanClick(e, span)}
           >
@@ -937,55 +1517,219 @@ const Proofreader = forwardRef(function Proofreader({ document, currentPage, vie
   const correctedCount = analyzedSpans.filter(sp => acceptedCorrections[sp.id] !== undefined).length;
   const allCorrected = totalSpans > 0 && correctedCount === totalSpans;
 
+  // ─── Sidebar helpers ────────────────────────────────────────────────────
+  const isNarrowSidebar = sidebarWidth < 240;
+
+  const toggleSection = (key) => {
+    setSectionsOpen(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const startSidebarResize = (e) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startW = sidebarRef.current?.offsetWidth ?? sidebarWidth;
+    const onMove = (ev) => {
+      const delta = startX - ev.clientX;
+      setSidebarWidth(Math.min(480, Math.max(220, startW + delta)));
+    };
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  };
+
+  const startSectionResize = (e) => {
+    e.preventDefault();
+    const startY = e.clientY;
+    const startH = correctionsRef.current?.offsetHeight ?? (sectionSplitPx ?? 200);
+    const totalH = sidebarInnerRef.current?.offsetHeight ?? 400;
+    const MIN_H = 56;
+    const onMove = (ev) => {
+      const newH = Math.min(totalH - MIN_H - 5, Math.max(MIN_H, startH + (ev.clientY - startY)));
+      setSectionSplitPx(newH);
+    };
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  };
+
+  const renderCorrectionsList = () => {
+    const currentPageNum = currentPage + 1;
+    const hiraAllEntries = hiraAllNormLog.filter(e => e.pageNum === currentPageNum);
+    if (reviewItems.length === 0 && hiraAllEntries.length === 0) {
+      return (
+        <div className="crp-empty">
+          {loadingAnalysis ? '' : totalSpans === 0 ? 'このページに疑義語はありません' : 'まだ補正されていません'}
+        </div>
+      );
+    }
+    return (
+      <div className="crp-list">
+        {hiraAllEntries.map((entry, i) => (
+          <div key={`hira-all-${i}`} className="crp-item crp-bulk-norm">
+            <div className="crp-main-row">
+              <span className="crp-suspect">ひらがな全一括</span>
+              <span className="crp-arrow">→</span>
+              <span className="crp-chosen">カタカナ</span>
+            </div>
+            <span className="crp-occ">{entry.count}文字</span>
+          </div>
+        ))}
+        {reviewItems.map(sp => (
+          <button
+            key={sp.id}
+            className={`crp-item${activeSpanId === sp.id ? ' crp-item-active' : ''}`}
+            onClick={() => handleReviewItemClick(sp.id)}
+            title={sp.id}
+          >
+            <div className="crp-main-row">
+              <span className="crp-suspect">{sp.suspect_span}</span>
+              <span className="crp-arrow">→</span>
+              <span className="crp-chosen">{acceptedCorrections[sp.id]}</span>
+            </div>
+            {sp.occurrence_index !== undefined && (
+              <span className="crp-occ">o{sp.occurrence_index}</span>
+            )}
+          </button>
+        ))}
+      </div>
+    );
+  };
+  // ────────────────────────────────────────────────────────────────────────
+
   return (
     <div className="proofreader-container">
       <div className="proofreader-toolbar">
-        <div className="mode-tabs">
-          <button className={`tab-btn ${mode === 'preview' ? 'active' : ''}`} onClick={() => setMode('preview')}>疑義箇所チェック</button>
-          <button className={`tab-btn ${mode === 'edit' ? 'active' : ''}`} onClick={() => setMode('edit')}>エディタ</button>
+        {/* ROW 1: 文書操作 */}
+        <div className="toolbar-row">
+          <div className="mode-tabs">
+            <button className={`tab-btn ${mode === 'preview' ? 'active' : ''}`} onClick={() => setMode('preview')}>疑義チェック</button>
+            <button className={`tab-btn ${mode === 'edit' ? 'active' : ''}`} onClick={() => setMode('edit')}>エディタ</button>
+          </div>
+          {mode === 'preview' && effectiveDocType !== 'unknown' && (
+            <span
+              className={`doc-type-badge doc-type-${effectiveDocType}${docType === 'unknown' && !manualDocType ? ' doc-type-fallback' : ''}${manualDocType ? ' doc-type-manual' : ''}`}
+              style={{ cursor: 'pointer' }}
+              onClick={handleDocTypeBadgeClick}
+              title={
+                manualDocType
+                  ? `手動設定: ${effectiveDocType === 'classical' ? '古文書' : '近代文書'}（クリックして${effectiveDocType === 'classical' ? '近代文書' : '古文書'}に切替）`
+                  : docType === 'unknown'
+                    ? `このページ単独では判定できないため文書全体の種別を使用（${documentDocType === 'classical' ? '古文書' : '近代文書'}）クリックで切替`
+                    : docTypeSource === 'frontmatter_era'
+                      ? `frontmatter の era フィールドから古文書と判定 (${Math.round(docTypeConfidence * 100)}% confidence)（クリックで切替）`
+                      : `ドキュメント種別: ${effectiveDocType === 'classical' ? '古文書' : '近代文書'} (${Math.round(docTypeConfidence * 100)}% confidence)（クリックで切替）`
+              }
+            >
+              {effectiveDocType === 'classical' ? '古文書' : '近代文書'}{manualDocType ? ' ✎' : ''}
+            </span>
+          )}
+          {mode === 'preview' && documentStyleHints && (
+            <span
+              className={`style-hint-badge style-hint-${documentStyleHints.particle_script}`}
+              title={
+                documentStyleHints.particle_script === 'insufficient'
+                  ? `助詞サンプル不足（${documentStyleHints.total_particles}件）`
+                  : `カタカナ ${documentStyleHints.kata_particle_count} / ひらがな ${documentStyleHints.hira_particle_count} | 総計 ${documentStyleHints.total_particles}件`
+              }
+            >
+              {documentStyleHints.particle_script === 'katakana_dominant'
+                ? `カタカナ優勢 ${Math.round(documentStyleHints.kata_ratio * 100)}%`
+                : documentStyleHints.particle_script === 'hiragana_dominant'
+                  ? `ひらがな優勢 ${Math.round((1 - documentStyleHints.kata_ratio) * 100)}%`
+                  : documentStyleHints.particle_script === 'mixed'
+                    ? `混在（カタカナ${Math.round(documentStyleHints.kata_ratio * 100)}% / ひらがな${Math.round((1 - documentStyleHints.kata_ratio) * 100)}%）`
+                    : '—'}
+            </span>
+          )}
+          <div className="toolbar-spacer" />
+          {mode === 'preview' && totalSpans > 0 && (
+            <div className={`progress-indicator${allCorrected ? ' all-corrected' : ''}`}>
+              {allCorrected ? `全件補正済み ${correctedCount} / ${totalSpans}` : `補正済み ${correctedCount} / ${totalSpans}`}
+            </div>
+          )}
+          {mode === 'preview' && viewMode === 'paged' && document?.ocr_pages?.length > 0 && (
+            <div className="page-indicator">
+              Page {currentPage + 1} / {document.ocr_pages.length}
+            </div>
+          )}
+          {mode === 'preview' && totalOcrPages > 0 && (
+            <div className={`ocr-status-badge${currentPageHasOcrText ? ' ocr-status-done' : ' ocr-status-pending'}`}>
+              OCR {pagesWithOcr}/{totalOcrPages}p
+              {!currentPageHasOcrText && ' · このページ未実行'}
+            </div>
+          )}
+          {(loadingAnalysis || isImporting) && <div className="loader-small"></div>}
+          {isImporting && <span className="import-status-label">インポート中...</span>}
         </div>
-        <div className="writing-mode-tabs">
-          <button className={`tab-btn ${writingMode === 'horizontal' ? 'active' : ''}`} onClick={() => setWritingMode('horizontal')}>横書き</button>
-          <button className={`tab-btn ${writingMode === 'vertical' ? 'active' : ''}`} onClick={() => setWritingMode('vertical')}>縦書き</button>
-        </div>
-        <div className="toolbar-spacer" />
+
+        {/* ROW 2: 処理 / 表示モード */}
         {mode === 'preview' && (
-          <button
-            className="cleanup-btn"
-            onClick={handleCleanupPreview}
-            disabled={!ocrContent}
-            title="OCRテキストから明らかなノイズを除去します（Undoで戻せます）"
-          >
-            ノイズ除去
-          </button>
-        )}
-        {mode === 'preview' && (
-          <div className="filter-tabs">
-            <button className={`tab-btn ${displayFilter === 'all' ? 'active' : ''}`} onClick={() => setDisplayFilter('all')}>すべて</button>
-            <button className={`tab-btn ${displayFilter === 'uncorrected' ? 'active' : ''}`} onClick={() => setDisplayFilter('uncorrected')}>未補正</button>
-            <button className={`tab-btn ${displayFilter === 'corrected' ? 'active' : ''}`} onClick={() => setDisplayFilter('corrected')}>補正済み</button>
+          <div className="toolbar-row toolbar-row-2">
+            <div className="writing-mode-segment">
+              <button
+                className={`seg-btn ${writingMode === 'horizontal' ? 'active' : ''}`}
+                onClick={() => setWritingMode('horizontal')}
+                title="横書き"
+              >
+                <svg width="15" height="12" viewBox="0 0 15 12" fill="none" aria-hidden="true">
+                  <rect x="0" y="0"  width="15" height="2" rx="1" fill="currentColor"/>
+                  <rect x="0" y="5"  width="15" height="2" rx="1" fill="currentColor"/>
+                  <rect x="0" y="10" width="15" height="2" rx="1" fill="currentColor"/>
+                </svg>
+              </button>
+              <span className="seg-sep">｜</span>
+              <button
+                className={`seg-btn ${writingMode === 'vertical' ? 'active' : ''}`}
+                onClick={() => setWritingMode('vertical')}
+                title="縦書き"
+              >
+                <svg width="12" height="15" viewBox="0 0 12 15" fill="none" aria-hidden="true">
+                  <rect x="0"  y="0" width="2" height="15" rx="1" fill="currentColor"/>
+                  <rect x="5"  y="0" width="2" height="15" rx="1" fill="currentColor"/>
+                  <rect x="10" y="0" width="2" height="15" rx="1" fill="currentColor"/>
+                </svg>
+              </button>
+            </div>
+            <div className="processing-dropdown-wrapper" ref={processingDropdownRef}>
+              <button type="button" className="processing-btn" onClick={() => setProcessingDropdownOpen(v => !v)}>
+                処理 ▾
+              </button>
+              {processingDropdownOpen && (
+                <div className="processing-dropdown-menu">
+                  {effectiveDocType === 'classical' && particleNormCount > 0 && (
+                    <button
+                      type="button"
+                      className="processing-menu-item"
+                      disabled={!ocrContent}
+                      onClick={() => { handleParticleNormPreview(); setProcessingDropdownOpen(false); }}
+                    >
+                      助詞統一 ({particleNormCount})
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className="processing-menu-item"
+                    disabled={!ocrContent}
+                    onClick={() => { handleCleanupPreview(); setProcessingDropdownOpen(false); }}
+                  >
+                    ノイズ除去
+                  </button>
+                </div>
+              )}
+            </div>
+            <div className="filter-tabs">
+              <button className={`tab-btn ${displayFilter === 'all' ? 'active' : ''}`} onClick={() => setDisplayFilter('all')}>すべて</button>
+              <button className={`tab-btn ${displayFilter === 'uncorrected' ? 'active' : ''}`} onClick={() => setDisplayFilter('uncorrected')}>未補正</button>
+              <button className={`tab-btn ${displayFilter === 'corrected' ? 'active' : ''}`} onClick={() => setDisplayFilter('corrected')}>補正済み</button>
+            </div>
           </div>
         )}
-        {mode === 'preview' && totalSpans > 0 && (
-          <div className={`progress-indicator${allCorrected ? ' all-corrected' : ''}`}>
-            {allCorrected
-              ? `全件補正済み ${correctedCount} / ${totalSpans}`
-              : `補正済み ${correctedCount} / ${totalSpans}`}
-          </div>
-        )}
-        {mode === 'preview' && viewMode === 'paged' && document?.ocr_pages?.length > 0 && (
-          <div className="page-indicator">
-            Page {currentPage + 1} / {document.ocr_pages.length}
-          </div>
-        )}
-        {mode === 'preview' && totalOcrPages > 0 && (
-          <div className={`ocr-status-badge${currentPageHasOcrText ? ' ocr-status-done' : ' ocr-status-pending'}`}>
-            OCR {pagesWithOcr}/{totalOcrPages}p
-            {!currentPageHasOcrText && ' · このページ未実行'}
-          </div>
-        )}
-        {(loadingAnalysis || isImporting) && <div className="loader-small"></div>}
-        {isImporting && <span className="import-status-label">インポート中...</span>}
       </div>
       
       {mode === 'preview' && displayFilter === 'uncorrected' && !loadingAnalysis && filteredSpans.length === 0 && totalSpans > 0 && (
@@ -1040,47 +1784,87 @@ const Proofreader = forwardRef(function Proofreader({ document, currentPage, vie
         </div>
 
         {mode === 'preview' && (
-          reviewPanelOpen ? (
-            <div className="correction-review-panel">
-              <div className="crp-header">
-                <span className="crp-title">
-                  補正一覧{reviewItems.length > 0 ? ` (${reviewItems.length})` : ''}
-                </span>
-                <button className="crp-collapse-btn" onClick={() => setReviewPanelOpen(false)} title="パネルを閉じる">‹</button>
-              </div>
-              {reviewItems.length === 0 ? (
-                <div className="crp-empty">
-                  {loadingAnalysis
-                    ? ''
-                    : totalSpans === 0
-                      ? 'このページに疑義語はありません'
-                      : 'まだ補正されていません'}
-                </div>
-              ) : (
-                <div className="crp-list">
-                  {reviewItems.map(sp => (
+          <div className="right-sidebar" ref={sidebarRef} style={{ width: sidebarWidth }}>
+            <div className="sidebar-resize-handle" onMouseDown={startSidebarResize} />
+            <div className="sidebar-inner" ref={sidebarInnerRef}>
+              {isNarrowSidebar ? (
+                <>
+                  <div className="sidebar-tab-bar">
                     <button
-                      key={sp.id}
-                      className={`crp-item${activeSpanId === sp.id ? ' crp-item-active' : ''}`}
-                      onClick={() => handleReviewItemClick(sp.id)}
-                      title={sp.id}
-                    >
-                      <div className="crp-main-row">
-                        <span className="crp-suspect">{sp.suspect_span}</span>
-                        <span className="crp-arrow">→</span>
-                        <span className="crp-chosen">{acceptedCorrections[sp.id]}</span>
-                      </div>
-                      {sp.occurrence_index !== undefined && (
-                        <span className="crp-occ">o{sp.occurrence_index}</span>
-                      )}
+                      className={`sidebar-tab-btn${activeTab === 'corrections' ? ' active' : ''}`}
+                      onClick={() => setActiveTab('corrections')}
+                    >補正{(reviewItems.length + hiraAllNormLog.filter(e => e.pageNum === currentPage + 1).length) > 0 ? ` (${reviewItems.length + hiraAllNormLog.filter(e => e.pageNum === currentPage + 1).length})` : ''}</button>
+                    <button
+                      className={`sidebar-tab-btn${activeTab === 'proposals' ? ' active' : ''}`}
+                      onClick={() => setActiveTab('proposals')}
+                    >判定</button>
+                  </div>
+                  <div className="sidebar-tab-content">
+                    {activeTab === 'corrections' && renderCorrectionsList()}
+                    {activeTab === 'proposals' && (
+                      <ProposalsPanel
+                        analyzedSpans={analyzedSpans}
+                        currentPageData={currentPageData}
+                        open={true}
+                        onToggle={() => {}}
+                        onSpanClick={handleReviewItemClick}
+                        headless
+                        hiraAllCount={hiraAllCount}
+                        onHiraAllNorm={handleHiraAllNormPreview}
+                        acceptedCorrections={acceptedCorrections}
+                      />
+                    )}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div
+                    className={`sidebar-section${sectionsOpen.corrections ? ' is-open' : ''}`}
+                    ref={correctionsRef}
+                    style={
+                      sectionsOpen.corrections && sectionsOpen.proposals && sectionSplitPx !== null
+                        ? { height: sectionSplitPx, flex: 'none' }
+                        : undefined
+                    }
+                  >
+                    <button className="sidebar-acc-header" onClick={() => toggleSection('corrections')}>
+                      <span>補正一覧{(reviewItems.length + hiraAllNormLog.filter(e => e.pageNum === currentPage + 1).length) > 0 ? ` (${reviewItems.length + hiraAllNormLog.filter(e => e.pageNum === currentPage + 1).length})` : ''}</span>
+                      <span className="acc-chevron">{sectionsOpen.corrections ? '▾' : '▸'}</span>
                     </button>
-                  ))}
-                </div>
+                    {sectionsOpen.corrections && (
+                      <div className="sidebar-section-body">
+                        {renderCorrectionsList()}
+                      </div>
+                    )}
+                  </div>
+                  {sectionsOpen.corrections && sectionsOpen.proposals && (
+                    <div className="sidebar-section-resizer" onMouseDown={startSectionResize} />
+                  )}
+                  <div className={`sidebar-section${sectionsOpen.proposals ? ' is-open' : ''}`}>
+                    <button className="sidebar-acc-header" onClick={() => toggleSection('proposals')}>
+                      <span>判定</span>
+                      <span className="acc-chevron">{sectionsOpen.proposals ? '▾' : '▸'}</span>
+                    </button>
+                    {sectionsOpen.proposals && (
+                      <div className="sidebar-section-body">
+                        <ProposalsPanel
+                          analyzedSpans={analyzedSpans}
+                          currentPageData={currentPageData}
+                          open={true}
+                          onToggle={() => {}}
+                          onSpanClick={handleReviewItemClick}
+                          headless
+                          hiraAllCount={hiraAllCount}
+                          onHiraAllNorm={handleHiraAllNormPreview}
+                          acceptedCorrections={acceptedCorrections}
+                        />
+                      </div>
+                    )}
+                  </div>
+                </>
               )}
             </div>
-          ) : (
-            <button className="crp-expand-btn" onClick={() => setReviewPanelOpen(true)} title="補正一覧を表示">›</button>
-          )
+          </div>
         )}
       </div>
 
@@ -1154,17 +1938,135 @@ const Proofreader = forwardRef(function Proofreader({ document, currentPage, vie
         </div>
       )}
 
+      {particleNormConfirm !== null && (
+        <div className="change-all-overlay" onClick={handleParticleNormCancel}>
+          <div className="change-all-dialog particle-norm-dialog" onClick={e => e.stopPropagation()}>
+            <div className="cad-header">助詞正規化プレビュー</div>
+            {particleNormConfirm.particles.length === 0 ? (
+              <>
+                <div className="cleanup-no-match">正規化対象の助詞は検出されませんでした</div>
+                <div className="cad-actions">
+                  <button className="cad-cancel" onClick={() => setParticleNormConfirm(null)}>閉じる</button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="cad-body">
+                  {/* 行単位フィルタ統計 */}
+                  <div className="pn-line-stats">
+                    <span className="pn-stat-item pn-stat-target">
+                      対象行 <strong>{particleNormConfirm.lineStats.total - particleNormConfirm.lineStats.excluded}</strong>
+                    </span>
+                    {particleNormConfirm.lineStats.excluded > 0 && (
+                      <span className="pn-stat-item pn-stat-excluded">
+                        除外行 <strong>{particleNormConfirm.lineStats.excluded}</strong>
+                      </span>
+                    )}
+                  </div>
+                  {/* 除外行の理由（最大5件） */}
+                  {particleNormConfirm.lineStats.excludedLineReasons.length > 0 && (
+                    <div className="pn-excluded-lines">
+                      <div className="pn-excluded-title">除外行（近代文書指標を検出）:</div>
+                      {particleNormConfirm.lineStats.excludedLineReasons.map((r, i) => (
+                        <div key={i} className="pn-excluded-item">
+                          <span className="pn-excluded-preview">{r.linePreview}</span>
+                          <span className="pn-excluded-rules">{r.rules.join(' / ')}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {/* 助詞別ヒット */}
+                  {particleNormConfirm.particles.map(({ hira, kata, count, samples }) => (
+                    <div key={hira} className="cleanup-rule-item">
+                      <div className="cleanup-rule-header">
+                        <span className="cad-label">{hira} → {kata}</span>
+                        <span className="cleanup-count">×{count}件</span>
+                      </div>
+                      {samples.length > 0 && (
+                        <div className="cleanup-examples">
+                          {samples.map((s, i) => (
+                            <span key={i} className="cleanup-example">{s.length > 14 ? s.slice(0, 14) + '…' : s}</span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                  <div className="cleanup-summary">
+                    合計 <strong>{particleNormConfirm.particles.reduce((n, p) => n + p.count, 0)}</strong> 件を正規化します（現在ページのみ）
+                  </div>
+                  <div className="cleanup-undo-note">Ctrl+Z で元に戻せます</div>
+                </div>
+                <div className="cad-actions">
+                  <button className="cad-cancel" onClick={handleParticleNormCancel}>キャンセル</button>
+                  <button className="cad-confirm" onClick={executeParticleNorm}>正規化を実行</button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {hiraAllConfirm !== null && (
+        <div className="change-all-overlay" onClick={() => setHiraAllConfirm(null)}>
+          <div className="change-all-dialog particle-norm-dialog" onClick={e => e.stopPropagation()}>
+            <div className="cad-header">ひらがな → カタカナ 一括変換</div>
+            {hiraAllConfirm.count === 0 ? (
+              <>
+                <div className="cleanup-no-match">変換対象のひらがなは検出されませんでした</div>
+                <div className="cad-actions">
+                  <button className="cad-cancel" onClick={() => setHiraAllConfirm(null)}>閉じる</button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="cad-body">
+                  <div className="pn-line-stats">
+                    <span className="pn-stat-item pn-stat-target">
+                      変換対象 <strong>{hiraAllConfirm.count}</strong> 文字
+                    </span>
+                  </div>
+                  <div className="crp-list" style={{ maxHeight: 160, overflowY: 'auto', marginTop: 6 }}>
+                    {hiraAllConfirm.chars.slice(0, 12).map(({ hira, kata, count }) => (
+                      <div key={hira} className="cleanup-rule-item">
+                        <div className="cleanup-rule-header">
+                          <span className="cad-label">{hira} → {kata}</span>
+                          <span className="cleanup-count">×{count}件</span>
+                        </div>
+                      </div>
+                    ))}
+                    {hiraAllConfirm.chars.length > 12 && (
+                      <div className="cleanup-rule-item" style={{ color: 'var(--color-muted)' }}>
+                        …他 {hiraAllConfirm.chars.length - 12} 種
+                      </div>
+                    )}
+                  </div>
+                  <div className="cleanup-summary">
+                    合計 <strong>{hiraAllConfirm.count}</strong> 文字を変換します（現在ページのみ）
+                  </div>
+                  <div className="cleanup-undo-note">Ctrl+Z で元に戻せます</div>
+                </div>
+                <div className="cad-actions">
+                  <button className="cad-cancel" onClick={() => setHiraAllConfirm(null)}>キャンセル</button>
+                  <button className="cad-confirm" onClick={executeHiraAllNorm}>変換を実行</button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       {popover && (
         <>
-          <div className="overlay" onClick={() => setPopover(null)} />
+          <div className="overlay" onClick={() => dismissPopover('overlay')} />
           <div
             className="popover"
             style={{ left: popover.x, top: popover.y }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="popover-header">
+            <div className="popover-header" onMouseDown={handlePopoverDragStart}>
+              <span className="popover-drag-handle" aria-hidden="true">⠿</span>
               <h4>「{popover.span.suspect_span}」の候補</h4>
-              <button className="btn-icon popover-close" onClick={() => setPopover(null)}>×</button>
+              <button className="btn-icon popover-close" onClick={() => dismissPopover('close_btn')}>×</button>
             </div>
             <div className="popover-reason">{popover.span.reason}</div>
             <div className="candidates-list">
@@ -1174,18 +2076,22 @@ const Proofreader = forwardRef(function Proofreader({ document, currentPage, vie
                   acceptedCorrections[sp.id] === undefined
                 );
                 const showChangeAll = sameUncorrected.length >= 2;
-                return (popover.span.candidates || []).map((cand, i) => (
+                return (popover.span.candidates || []).map((cand, i) => {
+                  const kanaLabel = getKanaLabel(cand);
+                  const isDeletionCandidate = cand === '';
+                  return (
                   <div key={i} className="candidate-row">
                     <button
                       className={[
-                        'candidate-btn',
-                        acceptedCorrections[popover.spanId] === cand ? 'candidate-selected' : '',
-                        popoverCandidateIndex === i ? 'candidate-keyboard-selected' : '',
+                        isDeletionCandidate ? 'delete-span-btn delete-span-btn--candidate' : 'candidate-btn',
+                        !isDeletionCandidate && acceptedCorrections[popover.spanId] === cand ? 'candidate-selected' : '',
+                        !isDeletionCandidate && popoverCandidateIndex === i ? 'candidate-keyboard-selected' : '',
                       ].filter(Boolean).join(' ')}
                       onClick={() => handleCandidateSelect(cand, i)}
                     >
-                      <span className="candidate-shortcut">{i < 9 ? i + 1 : ''}</span>
-                      {cand}
+                      {!isDeletionCandidate && <span className="candidate-shortcut">{i < 9 ? i + 1 : ''}</span>}
+                      {isDeletionCandidate ? '削除' : (cand + (kanaLabel ? '' : ''))}
+                      {!isDeletionCandidate && kanaLabel && <span className="kana-label">（{kanaLabel}）</span>}
                     </button>
                     {showChangeAll && (
                       <button
@@ -1193,11 +2099,14 @@ const Proofreader = forwardRef(function Proofreader({ document, currentPage, vie
                         onClick={() => handleChangeAll(manualInput || cand, manualInput ? -1 : i)}
                         title={manualInput
                           ? `手動入力「${manualInput}」でこのページの${sameUncorrected.length}件を一括補正`
-                          : `このページの「${popover.span.suspect_span}」${sameUncorrected.length}件をすべて補正`}
+                          : isDeletionCandidate
+                            ? `このページの「${popover.span.suspect_span}」${sameUncorrected.length}件をすべて削除`
+                            : `このページの「${popover.span.suspect_span}」${sameUncorrected.length}件をすべて補正`}
                       >全</button>
                     )}
                   </div>
-                ));
+                );
+                });
               })()}
             </div>
             <div className="manual-input-section">
@@ -1207,6 +2116,13 @@ const Proofreader = forwardRef(function Proofreader({ document, currentPage, vie
                 onChange={(e) => setManualInput(e.target.value)}
                 placeholder="手動入力..."
               />
+              {!(popover.span.candidates || []).includes('') && (
+                <button
+                  className="delete-span-btn"
+                  onClick={() => handleCandidateSelect('', -1)}
+                  title="この箇所を削除"
+                >削除</button>
+              )}
               <button
                 className="save-btn"
                 disabled={!manualInput}
@@ -1215,6 +2131,17 @@ const Proofreader = forwardRef(function Proofreader({ document, currentPage, vie
                 }}
               >確定</button>
             </div>
+            {(popover.span.candidates?.length ?? 0) > 0 && !acceptedCorrections[popover.spanId] && (
+              <div className="popover-reject-section">
+                <button
+                  className="reject-top1-btn"
+                  onClick={handleRejectTop1}
+                  title={`「${popover.span.candidates[0]}」を除外（この候補は学習対象から除外）`}
+                >
+                  「{popover.span.candidates[0]}」を除外
+                </button>
+              </div>
+            )}
           </div>
         </>
       )}

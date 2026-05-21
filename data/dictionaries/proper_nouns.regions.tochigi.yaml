@@ -1,0 +1,70 @@
+version: 1
+# proper_nouns.regions.tochigi.yaml — 栃木県地域限定辞書
+# 適用条件: frontmatter.region ∈ {栃木, 下野} またはファイル名に栃木を含む場合
+
+entries:
+
+  # 1. 県名・旧国名
+
+  - term: 栃木県
+    type: place
+    aliases: [栃木]
+    weight: 1.5
+
+  - term: 下野国
+    type: place
+    aliases: [下野, 野州]
+    weight: 1.3
+    note: "旧国名"
+
+  # 2. 郡名
+
+  - term: 那須郡
+    type: place
+    aliases: [那須]
+    weight: 1.4
+
+  - term: 塩谷郡
+    type: place
+    aliases: [塩谷]
+    weight: 1.4
+
+  - term: 芳賀郡
+    type: place
+    aliases: [芳賀]
+    weight: 1.4
+
+  - term: 河内郡
+    type: place
+    aliases: [河内]
+    weight: 1.4
+
+  - term: 上都賀郡
+    type: place
+    aliases: [上都賀]
+    weight: 1.4
+
+  - term: 下都賀郡
+    type: place
+    aliases: [下都賀]
+    weight: 1.4
+
+  - term: 寒川郡
+    type: place
+    aliases: [寒川]
+    weight: 1.4
+
+  - term: 安蘇郡
+    type: place
+    aliases: [安蘇]
+    weight: 1.4
+
+  - term: 足利郡
+    type: place
+    aliases: [足利]
+    weight: 1.4
+
+  - term: 梁田郡
+    type: place
+    aliases: [梁田]
+    weight: 1.4

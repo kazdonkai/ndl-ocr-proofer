@@ -1,0 +1,82 @@
+version: 1
+# proper_nouns.regions.nagasaki.yaml — 長崎県地域限定辞書
+# 適用条件: frontmatter.region ∈ {長崎, 肥前, 壱岐, 対馬} またはファイル名に長崎を含む場合
+
+entries:
+
+  # 1. 県名・旧国名
+
+  - term: 長崎県
+    type: place
+    aliases: [長崎]
+    weight: 1.5
+
+  - term: 肥前国
+    type: place
+    aliases: [肥前, 肥州]
+    weight: 1.3
+    note: "旧国名（佐賀県・長崎県）"
+
+  - term: 壱岐国
+    type: place
+    aliases: [壱岐, 壱州]
+    weight: 1.3
+    note: "旧国名（長崎県壱岐島）"
+
+  - term: 対馬国
+    type: place
+    aliases: [対馬, 対州]
+    weight: 1.3
+    note: "旧国名（長崎県対馬）"
+
+  # 2. 郡名
+
+  - term: 北松浦郡
+    type: place
+    aliases: [北松浦]
+    weight: 1.4
+
+  - term: 南松浦郡
+    type: place
+    aliases: [南松浦]
+    weight: 1.4
+
+  - term: 西彼杵郡
+    type: place
+    aliases: [西彼杵]
+    weight: 1.4
+
+  - term: 東彼杵郡
+    type: place
+    aliases: [東彼杵]
+    weight: 1.4
+
+  - term: 北高来郡
+    type: place
+    aliases: [北高来]
+    weight: 1.4
+
+  - term: 南高来郡
+    type: place
+    aliases: [南高来]
+    weight: 1.4
+
+  - term: 壱岐郡
+    type: place
+    aliases: [壱岐]
+    weight: 1.4
+
+  - term: 石田郡
+    type: place
+    aliases: [石田]
+    weight: 1.4
+
+  - term: 下県郡
+    type: place
+    aliases: [下県]
+    weight: 1.4
+
+  - term: 上県郡
+    type: place
+    aliases: [上県]
+    weight: 1.4

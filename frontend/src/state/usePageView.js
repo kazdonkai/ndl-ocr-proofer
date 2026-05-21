@@ -1,8 +1,8 @@
 // Page navigation and seamless scroll — maps to WorkspaceLeaf / view state in Obsidian
 import { useState, useEffect, useRef } from 'react';
 
-export function usePageView(documentData) {
-  const [viewMode, setViewMode] = useState('paged'); // 'paged' | 'seamless'
+export function usePageView(documentData, initialViewMode = 'paged') {
+  const [viewMode, setViewMode] = useState(initialViewMode); // 'paged' | 'seamless'
   const [currentPage, setCurrentPage] = useState(0); // 0-indexed
   const imageContainerRef = useRef(null);
   const pageBlockRefs = useRef([]);

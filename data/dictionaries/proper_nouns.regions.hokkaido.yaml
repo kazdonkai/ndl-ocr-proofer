@@ -1,0 +1,455 @@
+version: 1
+# proper_nouns.regions.hokkaido.yaml — 北海道地域限定辞書
+# 適用条件: frontmatter.region ∈ {北海道, 蝦夷} またはファイル名に北海道を含む場合
+
+entries:
+
+  # 1. 県名・旧国名
+
+  - term: 北海道
+    type: place
+    aliases: [道内]
+    weight: 1.5
+
+  - term: 蝦夷国
+    type: place
+    aliases: [蝦夷, 蝦夷地]
+    weight: 1.3
+    note: "旧国名"
+
+  # 2. 郡名
+
+  - term: 札幌郡
+    type: place
+    aliases: [札幌]
+    weight: 1.4
+
+  - term: 石狩郡
+    type: place
+    aliases: [石狩]
+    weight: 1.4
+
+  - term: 厚田郡
+    type: place
+    aliases: [厚田]
+    weight: 1.4
+
+  - term: 浜益郡
+    type: place
+    aliases: [浜益]
+    weight: 1.4
+
+  - term: 夕張郡
+    type: place
+    aliases: [夕張]
+    weight: 1.4
+
+  - term: 樺戸郡
+    type: place
+    aliases: [樺戸]
+    weight: 1.4
+
+  - term: 雨竜郡
+    type: place
+    aliases: [雨竜]
+    weight: 1.4
+
+  - term: 空知郡
+    type: place
+    aliases: [空知]
+    weight: 1.4
+
+  - term: 上川郡
+    type: place
+    aliases: [上川]
+    weight: 1.4
+
+  - term: 千歳郡
+    type: place
+    aliases: [千歳]
+    weight: 1.4
+
+  - term: 勇払郡
+    type: place
+    aliases: [勇払]
+    weight: 1.4
+
+  - term: 白老郡
+    type: place
+    aliases: [白老]
+    weight: 1.4
+
+  - term: 幌別郡
+    type: place
+    aliases: [幌別]
+    weight: 1.4
+
+  - term: 室蘭郡
+    type: place
+    aliases: [室蘭]
+    weight: 1.4
+
+  - term: 有珠郡
+    type: place
+    aliases: [有珠]
+    weight: 1.4
+
+  - term: 虻田郡
+    type: place
+    aliases: [虻田]
+    weight: 1.4
+
+  - term: 岩内郡
+    type: place
+    aliases: [岩内]
+    weight: 1.4
+
+  - term: 古宇郡
+    type: place
+    aliases: [古宇]
+    weight: 1.4
+
+  - term: 島牧郡
+    type: place
+    aliases: [島牧]
+    weight: 1.4
+
+  - term: 寿都郡
+    type: place
+    aliases: [寿都]
+    weight: 1.4
+
+  - term: 歌棄郡
+    type: place
+    aliases: [歌棄]
+    weight: 1.4
+
+  - term: 磯谷郡
+    type: place
+    aliases: [磯谷]
+    weight: 1.4
+
+  - term: 美国郡
+    type: place
+    aliases: [美国]
+    weight: 1.4
+
+  - term: 積丹郡
+    type: place
+    aliases: [積丹]
+    weight: 1.4
+
+  - term: 古平郡
+    type: place
+    aliases: [古平]
+    weight: 1.4
+
+  - term: 余市郡
+    type: place
+    aliases: [余市]
+    weight: 1.4
+
+  - term: 忍路郡
+    type: place
+    aliases: [忍路]
+    weight: 1.4
+
+  - term: 高島郡
+    type: place
+    aliases: [高島]
+    weight: 1.4
+
+  - term: 小樽郡
+    type: place
+    aliases: [小樽]
+    weight: 1.4
+
+  - term: 瀬棚郡
+    type: place
+    aliases: [瀬棚]
+    weight: 1.4
+
+  - term: 太櫓郡
+    type: place
+    aliases: [太櫓]
+    weight: 1.4
+
+  - term: 久遠郡
+    type: place
+    aliases: [久遠]
+    weight: 1.4
+
+  - term: 奥尻郡
+    type: place
+    aliases: [奥尻]
+    weight: 1.4
+
+  - term: 爾志郡
+    type: place
+    aliases: [爾志]
+    weight: 1.4
+
+  - term: 檜山郡
+    type: place
+    aliases: [檜山]
+    weight: 1.4
+
+  - term: 津軽郡
+    type: place
+    aliases: [津軽]
+    weight: 1.4
+
+  - term: 福島郡
+    type: place
+    aliases: [福島]
+    weight: 1.4
+
+  - term: 上磯郡
+    type: place
+    aliases: [上磯]
+    weight: 1.4
+
+  - term: 茅部郡
+    type: place
+    aliases: [茅部]
+    weight: 1.4
+
+  - term: 山越郡
+    type: place
+    aliases: [山越]
+    weight: 1.4
+
+  - term: 亀田郡
+    type: place
+    aliases: [亀田]
+    weight: 1.4
+
+  - term: 中川郡
+    type: place
+    aliases: [中川]
+    weight: 1.4
+
+  - term: 増毛郡
+    type: place
+    aliases: [増毛]
+    weight: 1.4
+
+  - term: 留萌郡
+    type: place
+    aliases: [留萌]
+    weight: 1.4
+
+  - term: 苫前郡
+    type: place
+    aliases: [苫前]
+    weight: 1.4
+
+  - term: 天塩郡
+    type: place
+    aliases: [天塩]
+    weight: 1.4
+
+  - term: 宗谷郡
+    type: place
+    aliases: [宗谷]
+    weight: 1.4
+
+  - term: 枝幸郡
+    type: place
+    aliases: [枝幸]
+    weight: 1.4
+
+  - term: 礼文郡
+    type: place
+    aliases: [礼文]
+    weight: 1.4
+
+  - term: 利尻郡
+    type: place
+    aliases: [利尻]
+    weight: 1.4
+
+  - term: 網走郡
+    type: place
+    aliases: [網走]
+    weight: 1.4
+
+  - term: 斜里郡
+    type: place
+    aliases: [斜里]
+    weight: 1.4
+
+  - term: 常呂郡
+    type: place
+    aliases: [常呂]
+    weight: 1.4
+
+  - term: 紋別郡
+    type: place
+    aliases: [紋別]
+    weight: 1.4
+
+  - term: 沙流郡
+    type: place
+    aliases: [沙流]
+    weight: 1.4
+
+  - term: 新冠郡
+    type: place
+    aliases: [新冠]
+    weight: 1.4
+
+  - term: 静内郡
+    type: place
+    aliases: [静内]
+    weight: 1.4
+
+  - term: 三石郡
+    type: place
+    aliases: [三石]
+    weight: 1.4
+
+  - term: 浦河郡
+    type: place
+    aliases: [浦河]
+    weight: 1.4
+
+  - term: 様似郡
+    type: place
+    aliases: [様似]
+    weight: 1.4
+
+  - term: 幌泉郡
+    type: place
+    aliases: [幌泉]
+    weight: 1.4
+
+  - term: 河東郡
+    type: place
+    aliases: [河東]
+    weight: 1.4
+
+  - term: 河西郡
+    type: place
+    aliases: [河西]
+    weight: 1.4
+
+  - term: 広尾郡
+    type: place
+    aliases: [広尾]
+    weight: 1.4
+
+  - term: 当縁郡
+    type: place
+    aliases: [当縁]
+    weight: 1.4
+
+  - term: 十勝郡
+    type: place
+    aliases: [十勝]
+    weight: 1.4
+
+  - term: 足寄郡
+    type: place
+    aliases: [足寄]
+    weight: 1.4
+
+  - term: 釧路郡
+    type: place
+    aliases: [釧路]
+    weight: 1.4
+
+  - term: 厚岸郡
+    type: place
+    aliases: [厚岸]
+    weight: 1.4
+
+  - term: 川上郡
+    type: place
+    aliases: [川上]
+    weight: 1.4
+
+  - term: 阿寒郡
+    type: place
+    aliases: [阿寒]
+    weight: 1.4
+
+  - term: 白糠郡
+    type: place
+    aliases: [白糠]
+    weight: 1.4
+
+  - term: 網尻郡
+    type: place
+    aliases: [網尻]
+    weight: 1.4
+
+  - term: 根室郡
+    type: place
+    aliases: [根室]
+    weight: 1.4
+
+  - term: 花咲郡
+    type: place
+    aliases: [花咲]
+    weight: 1.4
+
+  - term: 野付郡
+    type: place
+    aliases: [野付]
+    weight: 1.4
+
+  - term: 標津郡
+    type: place
+    aliases: [標津]
+    weight: 1.4
+
+  - term: 目梨郡
+    type: place
+    aliases: [目梨]
+    weight: 1.4
+
+  - term: 色丹郡
+    type: place
+    aliases: [色丹]
+    weight: 1.4
+
+  - term: 国後郡
+    type: place
+    aliases: [国後]
+    weight: 1.4
+
+  - term: 得撫郡
+    type: place
+    aliases: [得撫]
+    weight: 1.4
+
+  - term: 新知郡
+    type: place
+    aliases: [新知]
+    weight: 1.4
+
+  - term: 占守郡
+    type: place
+    aliases: [占守]
+    weight: 1.4
+
+  - term: 択捉郡
+    type: place
+    aliases: [択捉]
+    weight: 1.4
+
+  - term: 振別郡
+    type: place
+    aliases: [振別]
+    weight: 1.4
+
+  - term: 紗那郡
+    type: place
+    aliases: [紗那]
+    weight: 1.4
+
+  - term: 蘂取郡
+    type: place
+    aliases: [蘂取]
+    weight: 1.4

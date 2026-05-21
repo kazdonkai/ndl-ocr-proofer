@@ -1,0 +1,206 @@
+version: 1
+# proper_nouns.yaml — ドメイン固有名詞・法制語辞書 (初期シード)
+#
+# スキーマ:
+#   term     : str        — 正規形（規範的表記）
+#   type     : str        — place | person | office | legal_term | era
+#   aliases  : [str]     — 異表記・略記・旧字体など
+#   regions  : [str]     — 適用地域（frontmatter の region フィールドと照合）
+#                          空 = 全国共通
+#   weight   : float      — _BONUS_PROPER_NOUN_YAML に掛ける倍率（1.0 = 30pt）
+#   note     : str        — 補足コメント（省略可）
+#
+# 運用方針:
+#   - FileContextHintBuilder._load_proper_nouns() で自動読込
+#   - 自動置換禁止。CandidateEngine の候補加点のみ。
+#   - 実ログ（evaluation/logs/correction_events.jsonl）に基づいて段階的に追加する。
+#   - 1文字混同は shape_pairs.yaml が担当。本辞書は 2 文字以上の固有語が主。
+
+entries:
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # 1. 法制語 / 山林・共有地訴訟 頻出語  (regions: [] = 全国共通)
+  # ════════════════════════════════════════════════════════════════════════════
+
+  - term: 官有地
+    type: legal_term
+    aliases: []
+    regions: []
+    weight: 1.2
+    note: "地租改正後の地目分類。山論・入会事件の争点語"
+
+  - term: 民有地
+    type: legal_term
+    aliases: []
+    regions: []
+    weight: 1.2
+    note: "官有地に対する語"
+
+  - term: 入会権
+    type: legal_term
+    aliases: [入会, 入會, 入會権, 入会地]
+    regions: []
+    weight: 1.3
+    note: "入会一件で頻出。入會は旧字体（shape_pairs とも連携）"
+
+  - term: 共有地
+    type: legal_term
+    aliases: [共有山, 共有林, 共有林野]
+    regions: []
+    weight: 1.2
+
+  - term: 山論
+    type: legal_term
+    aliases: [山論一件, 山論訴訟]
+    regions: []
+    weight: 1.3
+    note: "山諍はOCR誤読 → shape_pairs で対応済み"
+
+  - term: 地租
+    type: legal_term
+    aliases: [地租改正, 地租改正条例]
+    regions: []
+    weight: 1.0
+
+  - term: 地券
+    type: legal_term
+    aliases: [地券状, 地券証]
+    regions: []
+    weight: 1.0
+
+  - term: 地押調査
+    type: legal_term
+    aliases: [地押, 地押丈量, 地籍調査]
+    regions: []
+    weight: 1.1
+    note: "明治期の林野確定根拠。地押は略記"
+
+  - term: 林野
+    type: legal_term
+    aliases: [山林原野, 山林野, 林野地]
+    regions: []
+    weight: 1.0
+
+  - term: 申立
+    type: legal_term
+    aliases: [申立書, 申立人, 申立状]
+    regions: []
+    weight: 1.0
+
+  - term: 控訴
+    type: legal_term
+    aliases: [控訴状, 控訴審, 控訴裁判]
+    regions: []
+    weight: 1.0
+
+  - term: 訴状
+    type: legal_term
+    aliases: [訴訟, 訴訟状]
+    regions: []
+    weight: 1.0
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # 2. 県名・旧国名
+  # ════════════════════════════════════════════════════════════════════════════
+
+  - term: 愛知県
+    type: place
+    aliases: [愛知]
+    regions: [愛知]
+    weight: 1.5
+
+  - term: 長野県
+    type: place
+    aliases: [長野]
+    regions: [長野]
+    weight: 1.5
+
+  - term: 尾張
+    type: place
+    aliases: [尾州, 尾張国, 尾張守]
+    regions: [愛知]
+    weight: 1.3
+    note: "旧国名。愛知県西部"
+
+  - term: 三河
+    type: place
+    aliases: [三州, 三河国, 三河守]
+    regions: [愛知]
+    weight: 1.3
+    note: "旧国名。愛知県東部"
+
+  - term: 信濃
+    type: place
+    aliases: [信州, 信濃国]
+    regions: [長野]
+    weight: 1.3
+    note: "旧国名。長野県"
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # 3. 郡名 (愛知県 初期投入 — 史料群に依存するため地域限定)
+  # ════════════════════════════════════════════════════════════════════════════
+
+  - term: 東春日井郡
+    type: place
+    aliases: [東春日井]
+    regions: [愛知]
+    weight: 1.4
+
+  - term: 西春日井郡
+    type: place
+    aliases: [西春日井]
+    regions: [愛知]
+    weight: 1.4
+
+  - term: 北設楽郡
+    type: place
+    aliases: [北設楽, 設楽郡]
+    regions: [愛知]
+    weight: 1.4
+    note: "山林・入会関係文書が多い地域"
+
+  - term: 南設楽郡
+    type: place
+    aliases: [南設楽]
+    regions: [愛知]
+    weight: 1.4
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # 4. 官衙・役職
+  # ════════════════════════════════════════════════════════════════════════════
+
+  - term: 名古屋控訴裁判所
+    type: office
+    aliases: [控訴裁判所, 名古屋上等裁判所]
+    regions: [愛知]
+    weight: 1.5
+    note: "明治期。文書発行元として頻出"
+
+  - term: 地方裁判所
+    type: office
+    aliases: []
+    regions: []
+    weight: 1.0
+
+  - term: 区裁判所
+    type: office
+    aliases: []
+    regions: []
+    weight: 1.0
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # 5. 年号 (era)
+  # ════════════════════════════════════════════════════════════════════════════
+
+  - term: 明治
+    type: era
+    aliases: []
+    regions: []
+    weight: 0.8
+    note: "頻出すぎるため低weight。誤読リスクが低い語には低bonus"
+
+  - term: 大正
+    type: era
+    aliases: []
+    regions: []
+    weight: 0.8

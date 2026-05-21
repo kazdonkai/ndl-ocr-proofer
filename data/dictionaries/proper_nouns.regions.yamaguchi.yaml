@@ -1,0 +1,81 @@
+version: 1
+# proper_nouns.regions.yamaguchi.yaml — 山口県地域限定辞書
+# 適用条件: frontmatter.region ∈ {山口, 周防, 長門} またはファイル名に山口を含む場合
+
+entries:
+
+  # 1. 県名・旧国名
+
+  - term: 山口県
+    type: place
+    aliases: [山口]
+    weight: 1.5
+
+  - term: 周防国
+    type: place
+    aliases: [周防, 防州]
+    weight: 1.3
+    note: "旧国名（山口県東部）"
+
+  - term: 長門国
+    type: place
+    aliases: [長門, 長州]
+    weight: 1.3
+    note: "旧国名（山口県西部）"
+
+  # 2. 郡名
+
+  - term: 大島郡
+    type: place
+    aliases: [大島]
+    weight: 1.4
+
+  - term: 玖珂郡
+    type: place
+    aliases: [玖珂]
+    weight: 1.4
+
+  - term: 熊毛郡
+    type: place
+    aliases: [熊毛]
+    weight: 1.4
+
+  - term: 都濃郡
+    type: place
+    aliases: [都濃]
+    weight: 1.4
+
+  - term: 佐波郡
+    type: place
+    aliases: [佐波]
+    weight: 1.4
+
+  - term: 吉敷郡
+    type: place
+    aliases: [吉敷]
+    weight: 1.4
+
+  - term: 阿武郡
+    type: place
+    aliases: [阿武]
+    weight: 1.4
+
+  - term: 大津郡
+    type: place
+    aliases: [大津]
+    weight: 1.4
+
+  - term: 厚狭郡
+    type: place
+    aliases: [厚狭]
+    weight: 1.4
+
+  - term: 美禰郡
+    type: place
+    aliases: [美禰]
+    weight: 1.4
+
+  - term: 豊浦郡
+    type: place
+    aliases: [豊浦]
+    weight: 1.4

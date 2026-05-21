@@ -1,0 +1,100 @@
+version: 1
+# proper_nouns.regions.miyagi.yaml — 宮城県地域限定辞書
+# 適用条件: frontmatter.region ∈ {宮城, 陸前} またはファイル名に宮城を含む場合
+
+entries:
+
+  # 1. 県名・旧国名
+
+  - term: 宮城県
+    type: place
+    aliases: [宮城]
+    weight: 1.5
+
+  - term: 陸前国
+    type: place
+    aliases: [陸前, 陸州]
+    weight: 1.3
+    note: "旧国名"
+
+  # 2. 郡名
+
+  - term: 本吉郡
+    type: place
+    aliases: [本吉]
+    weight: 1.4
+
+  - term: 登米郡
+    type: place
+    aliases: [登米]
+    weight: 1.4
+
+  - term: 栗原郡
+    type: place
+    aliases: [栗原]
+    weight: 1.4
+
+  - term: 玉造郡
+    type: place
+    aliases: [玉造]
+    weight: 1.4
+
+  - term: 志田郡
+    type: place
+    aliases: [志田]
+    weight: 1.4
+
+  - term: 加美郡
+    type: place
+    aliases: [加美]
+    weight: 1.4
+
+  - term: 桃生郡
+    type: place
+    aliases: [桃生]
+    weight: 1.4
+
+  - term: 牡鹿郡
+    type: place
+    aliases: [牡鹿]
+    weight: 1.4
+
+  - term: 遠田郡
+    type: place
+    aliases: [遠田]
+    weight: 1.4
+
+  - term: 黒川郡
+    type: place
+    aliases: [黒川]
+    weight: 1.4
+
+  - term: 宮城郡
+    type: place
+    aliases: [宮城]
+    weight: 1.4
+
+  - term: 名取郡
+    type: place
+    aliases: [名取]
+    weight: 1.4
+
+  - term: 柴田郡
+    type: place
+    aliases: [柴田]
+    weight: 1.4
+
+  - term: 刈田郡
+    type: place
+    aliases: [刈田]
+    weight: 1.4
+
+  - term: 伊具郡
+    type: place
+    aliases: [伊具]
+    weight: 1.4
+
+  - term: 亘理郡
+    type: place
+    aliases: [亘理]
+    weight: 1.4

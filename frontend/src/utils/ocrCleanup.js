@@ -8,15 +8,26 @@ export const CLEANUP_RULES = [
   {
     id: 'consecutive_square',
     description: '連続する □ 記号',
-    // 2+ consecutive □ — a single □ may represent a legitimate unknown char
     pattern: /□{2,}/g,
     replaceWith: '',
   },
   {
     id: 'symbol_garbage',
     description: '記号ゴミ列（・.、の混在）',
-    // 3+ chars composed entirely of ・ . 、 — single or double are left alone
     pattern: /[・.、]{3,}/g,
+    replaceWith: '',
+  },
+  {
+    id: 'consecutive_ellipsis',
+    description: '連続する … 記号（水平省略記号）',
+    // U+2026 が2個以上連続するのは明確なOCRノイズ
+    pattern: /…{2,}/g,
+    replaceWith: '',
+  },
+  {
+    id: 'consecutive_dots_wide',
+    description: '連続する点列（。・…などの混在3文字以上）',
+    pattern: /[。・…．｡]{3,}/g,
     replaceWith: '',
   },
 ];

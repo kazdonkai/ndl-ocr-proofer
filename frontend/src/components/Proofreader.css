@@ -9,14 +9,25 @@
 }
 
 .proofreader-toolbar {
-  height: 45px;
   background-color: var(--bg-panel);
   border-bottom: 1px solid var(--border);
   display: flex;
-  align-items: center;
-  padding: 0 15px;
-  gap: 20px;
+  flex-direction: column;
   flex-shrink: 0;
+}
+
+.toolbar-row {
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  gap: 8px;
+  min-height: 42px;
+}
+
+.toolbar-row-2 {
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.015);
+  min-height: 38px;
 }
 
 .mode-tabs {
@@ -56,7 +67,7 @@
   display: flex;
   overflow: hidden;
   position: relative;
-  height: calc(100% - 45px);
+  min-height: 0;
 }
 
 .editor-area-integrated {
@@ -172,6 +183,39 @@
   outline: none;
 }
 
+.highlight-span.highlight-dangerous {
+  background-color: rgba(239, 68, 68, 0.15);
+  border-bottom: 2px solid #ef4444;
+}
+
+.highlight-span.highlight-dangerous:hover {
+  background-color: rgba(239, 68, 68, 0.30);
+}
+
+.highlight-span.highlight-dangerous.highlight-active {
+  background-color: rgba(239, 68, 68, 0.45);
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.5);
+  outline: 2px solid #f87171;
+}
+
+@keyframes span-blink {
+  0%, 100% { opacity: 1; }
+  25%       { opacity: 0.15; }
+  50%       { opacity: 1; }
+  75%       { opacity: 0.15; }
+}
+
+.highlight-span.highlight-blink {
+  animation: span-blink 0.9s ease-in-out 2;
+}
+
+.highlight-particle {
+  background-color: rgba(167, 139, 250, 0.22);
+  border-bottom: 2px solid #a78bfa;
+  border-radius: 2px;
+  pointer-events: none;
+}
+
 /* サイドバー */
 .suspect-sidebar {
   width: 320px;
@@ -257,6 +301,20 @@
   justify-content: space-between;
   align-items: center;
   margin-bottom: 12px;
+  cursor: grab;
+  user-select: none;
+}
+
+.popover-header:active {
+  cursor: grabbing;
+}
+
+.popover-drag-handle {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  opacity: 0.5;
+  margin-right: 6px;
+  flex-shrink: 0;
 }
 
 .popover-header h4 {
@@ -317,6 +375,30 @@
   font-weight: 600;
 }
 
+.popover-reject-section {
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+  margin-top: 10px;
+}
+
+.reject-top1-btn {
+  width: 100%;
+  background: none;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: #f87171;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  text-align: center;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.reject-top1-btn:hover {
+  background: rgba(239, 68, 68, 0.12);
+  border-color: #ef4444;
+}
+
 .overlay {
   position: fixed;
   top: 0; left: 0; right: 0; bottom: 0;
@@ -374,9 +456,40 @@
   flex-shrink: 0;
 }
 
+.kana-label {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  margin-left: 4px;
+  font-weight: 400;
+  opacity: 0.8;
+}
+
 .save-btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+
+.delete-span-btn {
+  background: none;
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  color: #f87171;
+  padding: 0 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: background 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+
+.delete-span-btn:hover {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: #ef4444;
+}
+
+.delete-span-btn--candidate {
+  flex: 1;
+  padding: 10px 12px;
+  font-size: 1rem;
 }
 
 .ocr-prompt-container {
@@ -413,6 +526,104 @@
 
 .toolbar-spacer {
   flex: 1;
+}
+
+/* 横｜縦 segment */
+.writing-mode-segment {
+  display: flex;
+  align-items: center;
+  background: var(--bg-dark);
+  border-radius: 6px;
+  padding: 2px 5px;
+  gap: 1px;
+}
+
+.seg-btn {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 500;
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.seg-btn.active {
+  background-color: var(--accent);
+  color: white;
+}
+
+.seg-sep {
+  color: var(--border);
+  font-size: 0.75rem;
+  user-select: none;
+}
+
+/* 処理▼ dropdown */
+.processing-dropdown-wrapper {
+  position: relative;
+}
+
+.processing-btn {
+  padding: 4px 10px;
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.35);
+  color: var(--accent);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: all 0.15s;
+}
+
+.processing-btn:hover {
+  background: rgba(59, 130, 246, 0.2);
+}
+
+.processing-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 150px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px;
+  z-index: 500;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.55);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.processing-menu-item {
+  display: block;
+  width: 100%;
+  padding: 7px 12px;
+  background: none;
+  border: none;
+  color: var(--text-main);
+  text-align: left;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 0.82rem;
+  transition: background 0.15s;
+}
+
+.processing-menu-item:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.processing-menu-item:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .progress-indicator {
@@ -465,6 +676,136 @@
   padding: 3px;
   border-radius: 8px;
   gap: 2px;
+}
+
+/* ─── Resizable Right Sidebar ─────────────────────────────────────── */
+.right-sidebar {
+  display: flex;
+  flex-direction: row;
+  height: 100%;
+  background-color: var(--bg-panel);
+  border-left: 1px solid var(--border);
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.sidebar-resize-handle {
+  width: 5px;
+  flex-shrink: 0;
+  cursor: col-resize;
+  background: transparent;
+  transition: background 0.2s;
+}
+
+.sidebar-resize-handle:hover {
+  background: var(--accent);
+}
+
+.sidebar-inner {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+}
+
+/* Accordion section */
+.sidebar-section {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.sidebar-section.is-open {
+  flex: 1;
+  min-height: 0;
+}
+
+.sidebar-acc-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s;
+}
+
+.sidebar-acc-header:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-main);
+}
+
+.acc-chevron {
+  font-size: 0.8rem;
+  opacity: 0.7;
+}
+
+.sidebar-section-body {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+/* Section vertical resizer (between 補正一覧 and 判定) */
+.sidebar-section-resizer {
+  height: 5px;
+  flex-shrink: 0;
+  cursor: row-resize;
+  background: var(--border);
+  transition: background 0.2s;
+}
+
+.sidebar-section-resizer:hover,
+.sidebar-section-resizer:active {
+  background: var(--accent);
+}
+
+/* Tab mode (narrow sidebar < 240px) */
+.sidebar-tab-bar {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.sidebar-tab-btn {
+  flex: 1;
+  padding: 7px 4px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-align: center;
+  transition: all 0.15s;
+}
+
+.sidebar-tab-btn.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+.sidebar-tab-btn:hover:not(.active) {
+  color: var(--text-main);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.sidebar-tab-content {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
 }
 
 /* ─── Correction Review Panel ─────────────────────────────────────── */
@@ -568,6 +909,17 @@
 .crp-item.crp-item-active {
   background: rgba(59, 130, 246, 0.12);
   border-color: var(--accent);
+}
+
+.crp-item.crp-bulk-norm {
+  cursor: default;
+  background: rgba(99, 102, 241, 0.08);
+  border-color: rgba(99, 102, 241, 0.3);
+}
+
+.crp-item.crp-bulk-norm:hover {
+  background: rgba(99, 102, 241, 0.12);
+  border-color: rgba(99, 102, 241, 0.45);
 }
 
 .crp-main-row {
@@ -889,4 +1241,337 @@
 .ocr-run-btn-all:hover {
   background: var(--bg-hover);
   color: var(--text-main);
+}
+
+/* ── Doc type badge (P6) ── */
+.doc-type-badge {
+  font-size: 0.72rem;
+  padding: 2px 8px;
+  border-radius: 10px;
+  white-space: nowrap;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.doc-type-classical {
+  color: #c084fc;
+  background: rgba(192, 132, 252, 0.12);
+  border: 1px solid rgba(192, 132, 252, 0.35);
+}
+
+.doc-type-modern {
+  color: #60a5fa;
+  background: rgba(96, 165, 250, 0.12);
+  border: 1px solid rgba(96, 165, 250, 0.35);
+}
+
+/* fallback: ページ単位が insufficient_text のため文書全体の型を使用中 */
+.doc-type-fallback {
+  opacity: 0.65;
+  border-style: dashed;
+}
+
+/* ユーザー手動オーバーライド中 */
+.doc-type-manual {
+  border-style: solid;
+  opacity: 1;
+}
+
+.doc-type-badge:hover {
+  opacity: 0.8;
+}
+
+/* ── Phase 1-b: Document style hint badge ── */
+.style-hint-badge {
+  font-size: 0.70rem;
+  padding: 2px 7px;
+  border-radius: 10px;
+  white-space: nowrap;
+  font-weight: 500;
+  flex-shrink: 0;
+  cursor: default;
+}
+
+.style-hint-katakana_dominant {
+  color: #34d399;
+  background: rgba(52, 211, 153, 0.10);
+  border: 1px solid rgba(52, 211, 153, 0.30);
+}
+
+.style-hint-hiragana_dominant {
+  color: #fb923c;
+  background: rgba(251, 146, 60, 0.10);
+  border: 1px solid rgba(251, 146, 60, 0.30);
+}
+
+.style-hint-mixed {
+  color: #94a3b8;
+  background: rgba(148, 163, 184, 0.10);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+}
+
+.style-hint-insufficient {
+  color: #94a3b8;
+  background: rgba(148, 163, 184, 0.15);
+  border: 1px solid rgba(148, 163, 184, 0.45);
+}
+
+/* ── Particle normalization button (P6) ── */
+.particle-norm-btn {
+  padding: 5px 12px;
+  background: rgba(192, 132, 252, 0.12);
+  border: 1px solid rgba(192, 132, 252, 0.4);
+  color: #c084fc;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 500;
+  transition: background 0.2s, border-color 0.2s;
+  white-space: nowrap;
+}
+
+.particle-norm-btn:hover {
+  background: rgba(192, 132, 252, 0.22);
+  border-color: rgba(192, 132, 252, 0.7);
+}
+
+.particle-norm-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* ── Particle norm dialog (P6 / line-aware) ── */
+.particle-norm-dialog {
+  width: 400px;
+}
+
+/* 行統計バー */
+.pn-line-stats {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 8px;
+  font-size: 0.82rem;
+}
+
+.pn-stat-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 4px;
+}
+
+.pn-stat-target {
+  background: rgba(192, 132, 252, 0.1);
+  color: #c084fc;
+  border: 1px solid rgba(192, 132, 252, 0.3);
+}
+
+.pn-stat-excluded {
+  background: rgba(251, 146, 60, 0.1);
+  color: #fb923c;
+  border: 1px solid rgba(251, 146, 60, 0.3);
+}
+
+/* 除外行リスト */
+.pn-excluded-lines {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 7px 10px;
+  margin-bottom: 8px;
+  font-size: 0.78rem;
+}
+
+.pn-excluded-title {
+  color: var(--text-dim);
+  margin-bottom: 5px;
+  font-size: 0.75rem;
+}
+
+.pn-excluded-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  padding: 2px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.pn-excluded-item:first-of-type {
+  border-top: none;
+}
+
+.pn-excluded-preview {
+  color: var(--text-main);
+  font-family: monospace;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pn-excluded-rules {
+  color: #fb923c;
+  font-size: 0.72rem;
+  white-space: nowrap;
+  flex-shrink: 0;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── ProposalsPanel ──────────────────────────────────────────────────────── */
+
+.proposals-panel {
+  width: 200px;
+  flex-shrink: 0;
+  background-color: var(--bg-panel);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.proposals-expand-btn {
+  font-size: 1.1rem;
+}
+
+.proposals-list-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.proposals-hira-all-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 7px 10px;
+  margin-bottom: 6px;
+  background: rgba(96, 165, 250, 0.12);
+  border: 1px solid rgba(96, 165, 250, 0.35);
+  border-radius: 6px;
+  color: #93c5fd;
+  font-size: 0.78rem;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s;
+}
+.proposals-hira-all-btn:hover {
+  background: rgba(96, 165, 250, 0.22);
+}
+.proposals-hira-all-icon {
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  flex-shrink: 0;
+}
+.proposals-hira-all-label {
+  flex: 1;
+}
+.proposals-hira-all-count {
+  font-size: 0.72rem;
+  opacity: 0.75;
+  flex-shrink: 0;
+}
+
+.proposals-list {
+  gap: 3px;
+}
+
+.proposals-item {
+  padding: 6px 8px;
+  border-radius: 5px;
+  background: rgba(255,255,255,0.03);
+  border-left: 3px solid transparent;
+  font-size: 0.78rem;
+}
+
+.vd-border-accept { border-left-color: #22c55e; }
+.vd-border-review { border-left-color: #f59e0b; }
+.vd-border-reject { border-left-color: #ef4444; }
+
+.proposals-main-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+}
+
+.verdict-badge {
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 1px 5px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.vd-accept { background: rgba(34,197,94,0.18); color: #4ade80; }
+.vd-review { background: rgba(245,158,11,0.18); color: #fbbf24; }
+.vd-reject { background: rgba(239,68,68,0.18);  color: #f87171; }
+
+.proposals-detail {
+  margin-top: 5px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.proposals-reason {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  line-height: 1.45;
+}
+
+.proposals-suggestion {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-top: 2px;
+}
+
+.proposals-suggestion-label {
+  font-size: 0.68rem;
+  color: var(--text-dim);
+}
+
+.proposals-arrow {
+  color: var(--text-dim);
+  font-size: 0.8rem;
+}
+
+.proposals-candidate {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #60a5fa;
+}
+
+.proposals-conf {
+  font-size: 0.68rem;
+  color: var(--text-dim);
+}
+
+.proposals-sugg-reason {
+  font-size: 0.68rem;
+  color: var(--text-dim);
+  line-height: 1.4;
+}
+
+.proposals-image-link {
+  font-size: 0.70rem;
+  color: #818cf8;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  word-break: break-all;
+}
+
+.proposals-image-link:hover {
+  color: #a5b4fc;
+}
+
+.proposals-image-none {
+  font-size: 0.68rem;
+  color: var(--text-dim);
 }

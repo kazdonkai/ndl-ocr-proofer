@@ -1,0 +1,107 @@
+version: 1
+# proper_nouns.regions.mie.yaml — 三重県地域限定辞書
+# 適用条件: frontmatter.region ∈ {三重, 伊勢, 伊賀, 志摩} またはファイル名に三重を含む場合
+
+entries:
+
+  # 1. 県名・旧国名
+
+  - term: 三重県
+    type: place
+    aliases: [三重]
+    weight: 1.5
+
+  - term: 伊勢国
+    type: place
+    aliases: [伊勢, 勢州]
+    weight: 1.3
+    note: "旧国名（三重県北中部）"
+
+  - term: 伊賀国
+    type: place
+    aliases: [伊賀, 伊州]
+    weight: 1.3
+    note: "旧国名（三重県西部）"
+
+  - term: 志摩国
+    type: place
+    aliases: [志摩, 志州]
+    weight: 1.3
+    note: "旧国名（三重県東部）"
+
+  # 2. 郡名
+
+  - term: 阿山郡
+    type: place
+    aliases: [阿山]
+    weight: 1.4
+
+  - term: 名賀郡
+    type: place
+    aliases: [名賀]
+    weight: 1.4
+
+  - term: 桑名郡
+    type: place
+    aliases: [桑名]
+    weight: 1.4
+
+  - term: 員弁郡
+    type: place
+    aliases: [員弁]
+    weight: 1.4
+
+  - term: 三重郡
+    type: place
+    aliases: [三重]
+    weight: 1.4
+
+  - term: 鈴鹿郡
+    type: place
+    aliases: [鈴鹿]
+    weight: 1.4
+
+  - term: 河芸郡
+    type: place
+    aliases: [河芸]
+    weight: 1.4
+
+  - term: 安濃郡
+    type: place
+    aliases: [安濃]
+    weight: 1.4
+
+  - term: 一志郡
+    type: place
+    aliases: [一志]
+    weight: 1.4
+
+  - term: 飯南郡
+    type: place
+    aliases: [飯南]
+    weight: 1.4
+
+  - term: 多気郡
+    type: place
+    aliases: [多気]
+    weight: 1.4
+
+  - term: 度会郡
+    type: place
+    aliases: [度会]
+    weight: 1.4
+
+  - term: 志摩郡
+    type: place
+    aliases: [志摩]
+    weight: 1.4
+
+  - term: 北牟婁郡
+    type: place
+    aliases: [北牟婁]
+    weight: 1.4
+
+  - term: 南牟婁郡
+    type: place
+    aliases: [南牟婁]
+    weight: 1.4

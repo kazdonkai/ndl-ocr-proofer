@@ -1,6 +1,11 @@
 const STORAGE_KEY = 'ocr_app_settings';
 
 export const DEFAULT_SETTINGS = {
+  display: {
+    fontSize: 1.3,
+    lineHeight: 1.8,
+    viewMode: 'paged',
+  },
   vault: {
     showNotificationOnRescan: true,
   },
@@ -11,6 +16,11 @@ export const DEFAULT_SETTINGS = {
   },
   import: {
     defaultBehavior: 'replace',
+  },
+  document: {
+    statusPropertyName: 'minji_status',
+    completionStatusValue: 5,
+    statusOptions: [1, 2, 3, 4, 5],
   },
 };
 

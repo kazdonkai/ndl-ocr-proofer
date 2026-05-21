@@ -1,0 +1,116 @@
+version: 1
+# proper_nouns.regions.fukushima.yaml — 福島県地域限定辞書
+# 適用条件: frontmatter.region ∈ {福島, 磐城, 岩代} またはファイル名に福島を含む場合
+
+entries:
+
+  # 1. 県名・旧国名
+
+  - term: 福島県
+    type: place
+    aliases: [福島]
+    weight: 1.5
+
+  - term: 磐城国
+    type: place
+    aliases: [磐城, 磐州]
+    weight: 1.3
+    note: "旧国名"
+
+  - term: 岩代国
+    type: place
+    aliases: [岩代]
+    weight: 1.3
+    note: "旧国名"
+
+  # 2. 郡名
+
+  - term: 相馬郡
+    type: place
+    aliases: [相馬]
+    weight: 1.4
+
+  - term: 行方郡
+    type: place
+    aliases: [行方]
+    weight: 1.4
+
+  - term: 双葉郡
+    type: place
+    aliases: [双葉]
+    weight: 1.4
+
+  - term: 石城郡
+    type: place
+    aliases: [石城]
+    weight: 1.4
+
+  - term: 田村郡
+    type: place
+    aliases: [田村]
+    weight: 1.4
+
+  - term: 石川郡
+    type: place
+    aliases: [石川]
+    weight: 1.4
+
+  - term: 東白川郡
+    type: place
+    aliases: [東白川]
+    weight: 1.4
+
+  - term: 西白河郡
+    type: place
+    aliases: [西白河]
+    weight: 1.4
+
+  - term: 伊達郡
+    type: place
+    aliases: [伊達]
+    weight: 1.4
+
+  - term: 信夫郡
+    type: place
+    aliases: [信夫]
+    weight: 1.4
+
+  - term: 安達郡
+    type: place
+    aliases: [安達]
+    weight: 1.4
+
+  - term: 安積郡
+    type: place
+    aliases: [安積]
+    weight: 1.4
+
+  - term: 岩瀬郡
+    type: place
+    aliases: [岩瀬]
+    weight: 1.4
+
+  - term: 南会津郡
+    type: place
+    aliases: [南会津]
+    weight: 1.4
+
+  - term: 北会津郡
+    type: place
+    aliases: [北会津]
+    weight: 1.4
+
+  - term: 河沼郡
+    type: place
+    aliases: [河沼]
+    weight: 1.4
+
+  - term: 大沼郡
+    type: place
+    aliases: [大沼]
+    weight: 1.4
+
+  - term: 耶麻郡
+    type: place
+    aliases: [耶麻]
+    weight: 1.4

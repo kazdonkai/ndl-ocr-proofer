@@ -1,0 +1,55 @@
+version: 1
+# proper_nouns.regions.kagawa.yaml — 香川県地域限定辞書
+# 適用条件: frontmatter.region ∈ {香川, 讃岐} またはファイル名に香川を含む場合
+
+entries:
+
+  # 1. 県名・旧国名
+
+  - term: 香川県
+    type: place
+    aliases: [香川]
+    weight: 1.5
+
+  - term: 讃岐国
+    type: place
+    aliases: [讃岐, 讃州]
+    weight: 1.3
+    note: "旧国名"
+
+  # 2. 郡名
+
+  - term: 大川郡
+    type: place
+    aliases: [大川]
+    weight: 1.4
+
+  - term: 木田郡
+    type: place
+    aliases: [木田]
+    weight: 1.4
+
+  - term: 香川郡
+    type: place
+    aliases: [香川]
+    weight: 1.4
+
+  - term: 小豆郡
+    type: place
+    aliases: [小豆]
+    weight: 1.4
+
+  - term: 綾歌郡
+    type: place
+    aliases: [綾歌]
+    weight: 1.4
+
+  - term: 仲多度郡
+    type: place
+    aliases: [仲多度]
+    weight: 1.4
+
+  - term: 三豊郡
+    type: place
+    aliases: [三豊]
+    weight: 1.4

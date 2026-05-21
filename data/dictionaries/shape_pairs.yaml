@@ -1,0 +1,154 @@
+version: 1
+# shape_pairs.yaml — OCR 字形混同ペアルールセット (Phase 1-a 初期版)
+#
+# スキーマ:
+#   wrong:    str         — OCR が誤読した字形（1〜2文字）
+#   correct:  list[str]  — 正しい読み候補（優先順）
+#   score:    float       — 候補スコア重み（デフォルト 50.0）
+#   context:  str         — 'classical_jp' | 'modern_jp' | 'any'
+#   note:     str         — 任意のコメント（省略可）
+#
+# 運用ルール:
+#   - 自動一括置換には使わない。CandidateEngine の加点要素にのみ使用する。
+#   - 史料群に依存する頻出混同を優先し、初期は件数を絞る。
+#   - 1文字混同 / 2文字頻出 OCR 混同を対象とする。
+
+pairs:
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # 1文字: 視覚的形状が近い混同
+  # ══════════════════════════════════════════════════════════════════════════
+
+  # 末 vs 未  (横棒の長短)
+  - wrong: "末"
+    correct: ["未"]
+    score: 45.0
+    context: any
+
+  - wrong: "未"
+    correct: ["末"]
+    score: 45.0
+    context: any
+
+  # 土 vs 士  (縦棒の上下比率)
+  - wrong: "土"
+    correct: ["士"]
+    score: 40.0
+    context: any
+
+  - wrong: "士"
+    correct: ["土"]
+    score: 40.0
+    context: any
+
+  # 己 / 已 / 巳  (三字混同)
+  - wrong: "己"
+    correct: ["已", "巳"]
+    score: 40.0
+    context: any
+
+  - wrong: "已"
+    correct: ["己", "巳"]
+    score: 40.0
+    context: any
+
+  - wrong: "巳"
+    correct: ["己", "已"]
+    score: 40.0
+    context: any
+
+  # 入 vs 八  (払いの方向)
+  - wrong: "入"
+    correct: ["八"]
+    score: 40.0
+    context: any
+
+  - wrong: "八"
+    correct: ["入"]
+    score: 40.0
+    context: any
+
+  # 刀 vs 力  (払い形状)
+  - wrong: "刀"
+    correct: ["力"]
+    score: 40.0
+    context: any
+
+  - wrong: "力"
+    correct: ["刀"]
+    score: 40.0
+    context: any
+
+  # 日 vs 曰  (縦横比: 日は縦長、曰は横広)
+  - wrong: "日"
+    correct: ["曰"]
+    score: 35.0
+    context: classical_jp
+    note: "古文書の筆書き文字で混同されやすい"
+
+  - wrong: "曰"
+    correct: ["日"]
+    score: 35.0
+    context: classical_jp
+
+  # 侯 vs 候  (候補 / 申候 の文脈)
+  - wrong: "侯"
+    correct: ["候"]
+    score: 50.0
+    context: classical_jp
+    note: "申候・仕候 等の定型語で侯と誤読されやすい"
+
+  # 候 → レ 誤変換: 申立書のレ点位置
+  - wrong: "候"
+    correct: ["レ"]
+    score: 30.0
+    context: classical_jp
+    note: "申立系文書でのレ点位置の候字誤読（低スコア: 通常は候が正しいため）"
+
+  # 待 / 侍 / 持  (偏が「イ」か「寺」形で混同)
+  - wrong: "侍"
+    correct: ["待", "持"]
+    score: 40.0
+    context: any
+
+  # 大 vs 犬  (点の有無)
+  - wrong: "大"
+    correct: ["犬"]
+    score: 30.0
+    context: any
+
+  - wrong: "犬"
+    correct: ["大"]
+    score: 30.0
+    context: any
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # 2文字: 連綿・史料語頻出 OCR 混同
+  # ══════════════════════════════════════════════════════════════════════════
+
+  # 入會 / 入会  (旧字体 → 新字体への一方向正規化)
+  # 方針: 入會は常に入会へ寄せる。逆方向（入会→入會）は不要のため削除。
+  - wrong: "入會"
+    correct: ["入会"]
+    score: 60.0
+    context: classical_jp
+    note: "会所入会一件等で頻出。入会→入會の逆ペアは廃止"
+
+  # 山諍 → 山論  (諍≒論の字形近似)
+  - wrong: "山諍"
+    correct: ["山論"]
+    score: 60.0
+    context: classical_jp
+    note: "山論一件: 山諍は山論の OCR 誤読"
+
+  # 申渡 / 申度  (渡≒度の字形近似)
+  - wrong: "申度"
+    correct: ["申渡"]
+    score: 45.0
+    context: classical_jp
+
+  # 申付 / 申什  (付≒什の近似)
+  - wrong: "申什"
+    correct: ["申付"]
+    score: 40.0
+    context: classical_jp

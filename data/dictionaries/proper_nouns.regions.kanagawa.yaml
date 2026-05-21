@@ -1,0 +1,75 @@
+version: 1
+# proper_nouns.regions.kanagawa.yaml — 神奈川県地域限定辞書
+# 適用条件: frontmatter.region ∈ {神奈川, 相模} またはファイル名に神奈川を含む場合
+
+entries:
+
+  # 1. 県名・旧国名
+
+  - term: 神奈川県
+    type: place
+    aliases: [神奈川]
+    weight: 1.5
+
+  - term: 相模国
+    type: place
+    aliases: [相模, 相州]
+    weight: 1.3
+    note: "旧国名"
+
+  # 2. 郡名
+
+  - term: 久良岐郡
+    type: place
+    aliases: [久良岐]
+    weight: 1.4
+
+  - term: 橘樹郡
+    type: place
+    aliases: [橘樹]
+    weight: 1.4
+
+  - term: 都筑郡
+    type: place
+    aliases: [都筑]
+    weight: 1.4
+
+  - term: 三浦郡
+    type: place
+    aliases: [三浦]
+    weight: 1.4
+
+  - term: 鎌倉郡
+    type: place
+    aliases: [鎌倉]
+    weight: 1.4
+
+  - term: 高座郡
+    type: place
+    aliases: [高座]
+    weight: 1.4
+
+  - term: 中郡
+    type: place
+    aliases: [中]
+    weight: 1.4
+
+  - term: 足柄上郡
+    type: place
+    aliases: [足柄上]
+    weight: 1.4
+
+  - term: 足柄下郡
+    type: place
+    aliases: [足柄下]
+    weight: 1.4
+
+  - term: 愛甲郡
+    type: place
+    aliases: [愛甲]
+    weight: 1.4
+
+  - term: 津久井郡
+    type: place
+    aliases: [津久井]
+    weight: 1.4

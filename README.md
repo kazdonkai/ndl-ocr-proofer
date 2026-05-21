@@ -57,8 +57,9 @@ cp backend/.env.example backend/.env
 
 # 2. バックエンド起動 / Start backend
 cd backend
-pip install -r requirements.txt
-python3 -m uvicorn main:app --reload --host 127.0.0.1 --port 8000
+python3 -m venv .venv          # 初回のみ / First time only
+.venv/bin/pip install -r requirements.txt
+.venv/bin/python3 -m uvicorn main:app --reload --host 127.0.0.1 --port 8000
 
 # 3. フロントエンド起動 / Start frontend (separate terminal)
 cd frontend

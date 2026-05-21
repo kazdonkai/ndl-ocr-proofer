@@ -1,0 +1,122 @@
+version: 1
+# proper_nouns.regions.kyoto.yaml — 京都府地域限定辞書
+# 適用条件: frontmatter.region ∈ {京都, 山城, 丹後, 丹波} またはファイル名に京都を含む場合
+
+entries:
+
+  # 1. 県名・旧国名
+
+  - term: 京都府
+    type: place
+    aliases: [京都]
+    weight: 1.5
+
+  - term: 山城国
+    type: place
+    aliases: [山城, 城州]
+    weight: 1.3
+    note: "旧国名（京都府南部）"
+
+  - term: 丹後国
+    type: place
+    aliases: [丹後, 丹州]
+    weight: 1.3
+    note: "旧国名（京都府北部）"
+
+  - term: 丹波国
+    type: place
+    aliases: [丹波]
+    weight: 1.3
+    note: "旧国名（京都府・兵庫県）"
+
+  # 2. 郡名
+
+  - term: 愛宕郡
+    type: place
+    aliases: [愛宕]
+    weight: 1.4
+
+  - term: 葛野郡
+    type: place
+    aliases: [葛野]
+    weight: 1.4
+
+  - term: 紀伊郡
+    type: place
+    aliases: [紀伊]
+    weight: 1.4
+
+  - term: 乙訓郡
+    type: place
+    aliases: [乙訓]
+    weight: 1.4
+
+  - term: 宇治郡
+    type: place
+    aliases: [宇治]
+    weight: 1.4
+
+  - term: 久世郡
+    type: place
+    aliases: [久世]
+    weight: 1.4
+
+  - term: 綴喜郡
+    type: place
+    aliases: [綴喜]
+    weight: 1.4
+
+  - term: 相楽郡
+    type: place
+    aliases: [相楽]
+    weight: 1.4
+
+  - term: 南桑田郡
+    type: place
+    aliases: [南桑田]
+    weight: 1.4
+
+  - term: 北桑田郡
+    type: place
+    aliases: [北桑田]
+    weight: 1.4
+
+  - term: 船井郡
+    type: place
+    aliases: [船井]
+    weight: 1.4
+
+  - term: 何鹿郡
+    type: place
+    aliases: [何鹿]
+    weight: 1.4
+
+  - term: 天田郡
+    type: place
+    aliases: [天田]
+    weight: 1.4
+
+  - term: 加佐郡
+    type: place
+    aliases: [加佐]
+    weight: 1.4
+
+  - term: 与謝郡
+    type: place
+    aliases: [与謝]
+    weight: 1.4
+
+  - term: 中郡
+    type: place
+    aliases: [中]
+    weight: 1.4
+
+  - term: 竹野郡
+    type: place
+    aliases: [竹野]
+    weight: 1.4
+
+  - term: 熊野郡
+    type: place
+    aliases: [熊野]
+    weight: 1.4

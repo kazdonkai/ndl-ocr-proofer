@@ -1,0 +1,65 @@
+version: 1
+# proper_nouns.regions.yamanashi.yaml — 山梨県地域限定辞書
+# 適用条件: frontmatter.region ∈ {山梨, 甲斐} またはファイル名に山梨を含む場合
+
+entries:
+
+  # 1. 県名・旧国名
+
+  - term: 山梨県
+    type: place
+    aliases: [山梨]
+    weight: 1.5
+
+  - term: 甲斐国
+    type: place
+    aliases: [甲斐, 甲州]
+    weight: 1.3
+    note: "旧国名"
+
+  # 2. 郡名
+
+  - term: 北都留郡
+    type: place
+    aliases: [北都留]
+    weight: 1.4
+
+  - term: 南都留郡
+    type: place
+    aliases: [南都留]
+    weight: 1.4
+
+  - term: 東八代郡
+    type: place
+    aliases: [東八代]
+    weight: 1.4
+
+  - term: 西八代郡
+    type: place
+    aliases: [西八代]
+    weight: 1.4
+
+  - term: 東山梨郡
+    type: place
+    aliases: [東山梨]
+    weight: 1.4
+
+  - term: 西山梨郡
+    type: place
+    aliases: [西山梨]
+    weight: 1.4
+
+  - term: 中巨摩郡
+    type: place
+    aliases: [中巨摩]
+    weight: 1.4
+
+  - term: 南巨摩郡
+    type: place
+    aliases: [南巨摩]
+    weight: 1.4
+
+  - term: 北巨摩郡
+    type: place
+    aliases: [北巨摩]
+    weight: 1.4

@@ -1,0 +1,60 @@
+version: 1
+# proper_nouns.regions.saga.yaml — 佐賀県地域限定辞書
+# 適用条件: frontmatter.region ∈ {佐賀, 肥前} またはファイル名に佐賀を含む場合
+
+entries:
+
+  # 1. 県名・旧国名
+
+  - term: 佐賀県
+    type: place
+    aliases: [佐賀]
+    weight: 1.5
+
+  - term: 肥前国
+    type: place
+    aliases: [肥前, 肥州]
+    weight: 1.3
+    note: "旧国名（佐賀県・長崎県）"
+
+  # 2. 郡名
+
+  - term: 三養基郡
+    type: place
+    aliases: [三養基]
+    weight: 1.4
+
+  - term: 神埼郡
+    type: place
+    aliases: [神埼]
+    weight: 1.4
+
+  - term: 佐賀郡
+    type: place
+    aliases: [佐賀]
+    weight: 1.4
+
+  - term: 小城郡
+    type: place
+    aliases: [小城]
+    weight: 1.4
+
+  - term: 杵島郡
+    type: place
+    aliases: [杵島]
+    weight: 1.4
+
+  - term: 藤津郡
+    type: place
+    aliases: [藤津]
+    weight: 1.4
+
+  - term: 東松浦郡
+    type: place
+    aliases: [東松浦]
+    weight: 1.4
+
+  - term: 西松浦郡
+    type: place
+    aliases: [西松浦]
+    weight: 1.4

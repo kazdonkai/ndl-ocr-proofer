@@ -1,0 +1,55 @@
+version: 1
+# proper_nouns.regions.kochi.yaml — 高知県地域限定辞書
+# 適用条件: frontmatter.region ∈ {高知, 土佐} またはファイル名に高知を含む場合
+
+entries:
+
+  # 1. 県名・旧国名
+
+  - term: 高知県
+    type: place
+    aliases: [高知]
+    weight: 1.5
+
+  - term: 土佐国
+    type: place
+    aliases: [土佐, 土州]
+    weight: 1.3
+    note: "旧国名"
+
+  # 2. 郡名
+
+  - term: 安芸郡
+    type: place
+    aliases: [安芸]
+    weight: 1.4
+
+  - term: 香美郡
+    type: place
+    aliases: [香美]
+    weight: 1.4
+
+  - term: 長岡郡
+    type: place
+    aliases: [長岡]
+    weight: 1.4
+
+  - term: 土佐郡
+    type: place
+    aliases: [土佐]
+    weight: 1.4
+
+  - term: 吾川郡
+    type: place
+    aliases: [吾川]
+    weight: 1.4
+
+  - term: 高岡郡
+    type: place
+    aliases: [高岡]
+    weight: 1.4
+
+  - term: 幡多郡
+    type: place
+    aliases: [幡多]
+    weight: 1.4

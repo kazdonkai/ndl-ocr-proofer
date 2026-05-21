@@ -13,6 +13,7 @@ class DictionaryTerm(BaseModel):
     protect: bool = False
     source: Optional[str] = ""
     approved: bool = False
+    tier: str = "stable"   # "stable" (approved/) | "experimental" (staging/)
     all_forms: Set[str] = set()
 
     def model_post_init(self, __context: Any) -> None:
@@ -36,6 +37,7 @@ class DocumentResponse(BaseModel):
     ocr_pages: list[OcrPage] = []
     ocr_json: dict | None = None
     logs: list[str] = []
+    frontmatter: dict | None = None
 
 
 class CorrectionEntry(BaseModel):
@@ -48,6 +50,8 @@ class CorrectionEntry(BaseModel):
     # stable ID assigned at analysis time (Part 3 frontend convention: p{page}_o{occ}_s{start})
     span_id: str = ""
     occurrence_index: int = 0
+    # "accept" | "skip" | "reject" — user decision type
+    action_type: str = "accept"
 
 
 class RunOcrPageRequest(BaseModel):
@@ -65,9 +69,43 @@ class SaveDocumentRequest(BaseModel):
     model_name: str = "manual"
 
 
+class UpdateStatusRequest(BaseModel):
+    property_name: str
+    value: int | str
+
+
+class LearningFlushRequest(BaseModel):
+    events: list[dict]
+
+
+class DocumentStyleHints(BaseModel):
+    particle_script: str        # 'katakana_dominant' | 'mixed' | 'hiragana_dominant' | 'insufficient'
+    kata_particle_count: int = 0
+    hira_particle_count: int = 0
+    kata_ratio: float = 0.0
+    total_particles: int = 0
+
+
 class AnalyzeRequest(BaseModel):
     markdown_content: str
     ocr_json: dict | None = None
+    frontmatter: dict | None = None
+    filename: str = ""           # Phase 1-c: file context for domain hint
+
+
+class OcrNormalizationSuggestion(BaseModel):
+    suggested_candidate: str
+    suggestion_reason: str
+    suggestion_confidence: float
+    suggestion_type: str = "ocr_normalization"
+
+
+class ValidationResult(BaseModel):
+    verdict: str            # "accept" | "review" | "reject"
+    score: float
+    reason: str
+    image_audit_required: bool = False
+    suggestion: Optional[OcrNormalizationSuggestion] = None
 
 
 class AnalyzedSpan(BaseModel):
@@ -82,13 +120,41 @@ class AnalyzedSpan(BaseModel):
     confidence: float = 1.0
     is_protected: bool = False
     candidates: list[str] = []
+    validation: Optional[ValidationResult] = None
+    # True when this span was detected by detect_hira_bigram_suspects (e.g. より→ヨリ).
+    # Used by span_accepted logging to collect evidence for future rule-promotion decisions.
+    is_bigram_suspect: bool = False
+    # candidate → hintSource mapping for soft-hint candidates (e.g. {"ヨリ": "manual_override_seed"}).
+    # Empty for spans with no soft hints.  Frontend logs hintSource when user selects one of these.
+    soft_hint_candidates: dict[str, str] = {}
 
     @computed_field
     @property
     def suggestions(self) -> list[str]:
         return self.candidates
 
+    @computed_field
+    @property
+    def is_dangerous(self) -> bool:
+        return self.validation is not None and self.validation.verdict == "reject"
+
+    @computed_field
+    @property
+    def recommended_verdict(self) -> str:
+        if self.validation:
+            return self.validation.verdict
+        if self.confidence >= 0.75:
+            return "accept"
+        if self.confidence >= 0.45:
+            return "review"
+        return "reject"
+
 
 class AnalyzeResponse(BaseModel):
     results: list[AnalyzedSpan]
     normalized_content: str | None = None
+    doc_type: str = "unknown"                  # "classical" | "modern" | "unknown"
+    doc_type_confidence: float = 0.0
+    doc_type_source: str = "heuristic"         # "frontmatter" | "heuristic" | "insufficient_text"
+    particle_normalization_count: int = 0       # に/を/は → ニ/ヲ/ハ 候補件数（current page）
+    document_style_hints: DocumentStyleHints | None = None  # Phase 1-b

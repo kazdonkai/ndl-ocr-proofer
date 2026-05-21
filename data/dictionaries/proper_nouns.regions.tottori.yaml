@@ -1,0 +1,56 @@
+version: 1
+# proper_nouns.regions.tottori.yaml — 鳥取県地域限定辞書
+# 適用条件: frontmatter.region ∈ {鳥取, 因幡, 伯耆} またはファイル名に鳥取を含む場合
+
+entries:
+
+  # 1. 県名・旧国名
+
+  - term: 鳥取県
+    type: place
+    aliases: [鳥取]
+    weight: 1.5
+
+  - term: 因幡国
+    type: place
+    aliases: [因幡, 因州]
+    weight: 1.3
+    note: "旧国名（鳥取県東部）"
+
+  - term: 伯耆国
+    type: place
+    aliases: [伯耆, 伯州]
+    weight: 1.3
+    note: "旧国名（鳥取県西部）"
+
+  # 2. 郡名
+
+  - term: 岩美郡
+    type: place
+    aliases: [岩美]
+    weight: 1.4
+
+  - term: 八頭郡
+    type: place
+    aliases: [八頭]
+    weight: 1.4
+
+  - term: 気高郡
+    type: place
+    aliases: [気高]
+    weight: 1.4
+
+  - term: 東伯郡
+    type: place
+    aliases: [東伯]
+    weight: 1.4
+
+  - term: 西伯郡
+    type: place
+    aliases: [西伯]
+    weight: 1.4
+
+  - term: 日野郡
+    type: place
+    aliases: [日野]
+    weight: 1.4

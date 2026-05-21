@@ -1,0 +1,357 @@
+version: 1
+# proper_nouns.core.yaml — 全国共通の法制語・官職・元号辞書
+#
+# 対象: regions フィールドが空（全国共通）のエントリのみ収録
+# 地域限定語は proper_nouns.regions.{region}.yaml へ
+#
+# スキーマ:
+#   term     : str        — 正規形
+#   type     : str        — place | office | legal_term | era
+#   aliases  : [str]      — 異表記・略記・旧字体
+#   weight   : float      — _BONUS_PROPER_NOUN_YAML に掛ける倍率（1.0 = 30pt）
+#   note     : str        — 省略可
+
+entries:
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # 1. 法制語 / 山林・共有地訴訟 頻出語
+  # ════════════════════════════════════════════════════════════════════════════
+
+  - term: 官有地
+    type: legal_term
+    aliases: []
+    weight: 1.2
+    note: "地租改正後の地目分類。山論・入会事件の争点語"
+
+  - term: 民有地
+    type: legal_term
+    aliases: []
+    weight: 1.2
+    note: "官有地に対する語"
+
+  - term: 入会権
+    type: legal_term
+    aliases: [入会, 入会地]
+    weight: 1.3
+    note: "入会一件で頻出。入會の旧字体正規化は shape_pairs レイヤで処理"
+
+  - term: 共有地
+    type: legal_term
+    aliases: [共有山, 共有林, 共有林野]
+    weight: 1.2
+
+  - term: 山論
+    type: legal_term
+    aliases: [山論一件, 山論訴訟]
+    weight: 1.3
+    note: "山諍はOCR誤読 → shape_pairs で対応済み"
+
+  - term: 地租
+    type: legal_term
+    aliases: [地租改正, 地租改正条例]
+    weight: 1.0
+
+  - term: 地券
+    type: legal_term
+    aliases: [地券状, 地券証]
+    weight: 1.0
+
+  - term: 地押調査
+    type: legal_term
+    aliases: [地押, 地押丈量, 地籍調査]
+    weight: 1.1
+    note: "明治期の林野確定根拠"
+
+  - term: 林野
+    type: legal_term
+    aliases: [山林原野, 山林野, 林野地]
+    weight: 1.0
+
+  - term: 申立
+    type: legal_term
+    aliases: [申立書, 申立人, 申立状]
+    weight: 1.0
+
+  - term: 控訴
+    type: legal_term
+    aliases: [控訴状, 控訴審, 控訴裁判]
+    weight: 1.0
+
+  - term: 訴状
+    type: legal_term
+    aliases: [訴訟, 訴訟状]
+    weight: 1.0
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # 2. 官衙（全国共通）
+  # ════════════════════════════════════════════════════════════════════════════
+
+  - term: 地方裁判所
+    type: office
+    aliases: []
+    weight: 1.0
+
+  - term: 区裁判所
+    type: office
+    aliases: []
+    weight: 1.0
+
+  - term: 大審院
+    type: office
+    aliases: []
+    weight: 1.1
+    note: "最高裁判所相当。大審院民事判決録など"
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # 3. 元号
+  # ════════════════════════════════════════════════════════════════════════════
+
+  - term: 明治
+    type: era
+    aliases: []
+    weight: 0.8
+    note: "頻出すぎるため低weight"
+
+  - term: 大正
+    type: era
+    aliases: []
+    weight: 0.8
+
+  # 近代・現代元号（昭和・平成・令和）
+  - term: 昭和
+    type: era
+    aliases: []
+    weight: 0.7
+    note: "近代・現代"
+
+  - term: 平成
+    type: era
+    aliases: []
+    weight: 0.7
+    note: "近代・現代"
+
+  - term: 令和
+    type: era
+    aliases: []
+    weight: 0.7
+    note: "近代・現代"
+
+  # 江戸期元号
+  - term: 慶応
+    type: era
+    aliases: []
+    weight: 0.8
+    note: "近世史料"
+
+  - term: 元治
+    type: era
+    aliases: []
+    weight: 0.8
+    note: "近世史料"
+
+  - term: 文久
+    type: era
+    aliases: []
+    weight: 0.8
+    note: "近世史料"
+
+  - term: 万延
+    type: era
+    aliases: []
+    weight: 0.8
+    note: "近世史料"
+
+  - term: 安政
+    type: era
+    aliases: []
+    weight: 0.8
+    note: "近世史料"
+
+  - term: 嘉永
+    type: era
+    aliases: []
+    weight: 0.8
+    note: "近世史料"
+
+  - term: 弘化
+    type: era
+    aliases: []
+    weight: 0.8
+    note: "近世史料"
+
+  - term: 天保
+    type: era
+    aliases: []
+    weight: 0.8
+    note: "近世史料"
+
+  - term: 文政
+    type: era
+    aliases: []
+    weight: 0.8
+    note: "近世史料"
+
+  - term: 文化
+    type: era
+    aliases: []
+    weight: 0.8
+    note: "近世史料"
+
+  - term: 享和
+    type: era
+    aliases: []
+    weight: 0.8
+    note: "近世史料"
+
+  - term: 寛政
+    type: era
+    aliases: []
+    weight: 0.8
+    note: "近世史料"
+
+  - term: 天明
+    type: era
+    aliases: []
+    weight: 0.8
+    note: "近世史料"
+
+  - term: 安永
+    type: era
+    aliases: []
+    weight: 0.8
+    note: "近世史料"
+
+  - term: 明和
+    type: era
+    aliases: []
+    weight: 0.8
+    note: "近世史料"
+
+  - term: 宝暦
+    type: era
+    aliases: []
+    weight: 0.8
+    note: "近世史料"
+
+  - term: 寛延
+    type: era
+    aliases: []
+    weight: 0.8
+    note: "近世史料"
+
+  - term: 延享
+    type: era
+    aliases: []
+    weight: 0.8
+    note: "近世史料"
+
+  - term: 寛保
+    type: era
+    aliases: []
+    weight: 0.8
+    note: "近世史料"
+
+  - term: 元文
+    type: era
+    aliases: []
+    weight: 0.8
+    note: "近世史料"
+
+  - term: 享保
+    type: era
+    aliases: []
+    weight: 0.8
+    note: "近世史料"
+
+  - term: 正徳
+    type: era
+    aliases: []
+    weight: 0.8
+    note: "近世史料"
+
+  - term: 宝永
+    type: era
+    aliases: []
+    weight: 0.8
+    note: "近世史料"
+
+  - term: 元禄
+    type: era
+    aliases: []
+    weight: 0.8
+    note: "近世史料"
+
+  - term: 貞享
+    type: era
+    aliases: []
+    weight: 0.8
+    note: "近世史料"
+
+  - term: 天和
+    type: era
+    aliases: []
+    weight: 0.8
+    note: "近世史料"
+
+  - term: 延宝
+    type: era
+    aliases: []
+    weight: 0.8
+    note: "近世史料"
+
+  - term: 寛文
+    type: era
+    aliases: []
+    weight: 0.8
+    note: "近世史料"
+
+  - term: 万治
+    type: era
+    aliases: []
+    weight: 0.8
+    note: "近世史料"
+
+  - term: 明暦
+    type: era
+    aliases: []
+    weight: 0.8
+    note: "近世史料"
+
+  - term: 承応
+    type: era
+    aliases: []
+    weight: 0.8
+    note: "近世史料"
+
+  - term: 慶安
+    type: era
+    aliases: []
+    weight: 0.8
+    note: "近世史料"
+
+  - term: 正保
+    type: era
+    aliases: []
+    weight: 0.8
+    note: "近世史料"
+
+  - term: 寛永
+    type: era
+    aliases: []
+    weight: 0.8
+    note: "近世史料"
+
+  - term: 元和
+    type: era
+    aliases: []
+    weight: 0.8
+    note: "近世史料"
+
+  - term: 慶長
+    type: era
+    aliases: []
+    weight: 0.8
+    note: "近世史料"
+
+  # 地理エントリ（都道府県名・旧国名）は proper_nouns.prefectures.yaml に移動しました。
+  # core は「全国共通の法制語・官衙・元号」のみを収録します。

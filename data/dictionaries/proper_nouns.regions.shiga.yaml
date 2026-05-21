@@ -1,0 +1,80 @@
+version: 1
+# proper_nouns.regions.shiga.yaml — 滋賀県地域限定辞書
+# 適用条件: frontmatter.region ∈ {滋賀, 近江} またはファイル名に滋賀を含む場合
+
+entries:
+
+  # 1. 県名・旧国名
+
+  - term: 滋賀県
+    type: place
+    aliases: [滋賀]
+    weight: 1.5
+
+  - term: 近江国
+    type: place
+    aliases: [近江, 江州]
+    weight: 1.3
+    note: "旧国名"
+
+  # 2. 郡名
+
+  - term: 高島郡
+    type: place
+    aliases: [高島]
+    weight: 1.4
+
+  - term: 伊香郡
+    type: place
+    aliases: [伊香]
+    weight: 1.4
+
+  - term: 東浅井郡
+    type: place
+    aliases: [東浅井]
+    weight: 1.4
+
+  - term: 坂田郡
+    type: place
+    aliases: [坂田]
+    weight: 1.4
+
+  - term: 犬上郡
+    type: place
+    aliases: [犬上]
+    weight: 1.4
+
+  - term: 愛知郡
+    type: place
+    aliases: [愛知]
+    weight: 1.4
+
+  - term: 神崎郡
+    type: place
+    aliases: [神崎]
+    weight: 1.4
+
+  - term: 蒲生郡
+    type: place
+    aliases: [蒲生]
+    weight: 1.4
+
+  - term: 野洲郡
+    type: place
+    aliases: [野洲]
+    weight: 1.4
+
+  - term: 栗太郡
+    type: place
+    aliases: [栗太]
+    weight: 1.4
+
+  - term: 滋賀郡
+    type: place
+    aliases: [滋賀]
+    weight: 1.4
+
+  - term: 甲賀郡
+    type: place
+    aliases: [甲賀]
+    weight: 1.4

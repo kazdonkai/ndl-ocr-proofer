@@ -1,0 +1,75 @@
+version: 1
+# proper_nouns.regions.yamagata.yaml — 山形県地域限定辞書
+# 適用条件: frontmatter.region ∈ {山形, 出羽} またはファイル名に山形を含む場合
+
+entries:
+
+  # 1. 県名・旧国名
+
+  - term: 山形県
+    type: place
+    aliases: [山形]
+    weight: 1.5
+
+  - term: 出羽国
+    type: place
+    aliases: [出羽, 羽州]
+    weight: 1.3
+    note: "旧国名（秋田・山形）"
+
+  # 2. 郡名
+
+  - term: 飽海郡
+    type: place
+    aliases: [飽海]
+    weight: 1.4
+
+  - term: 東田川郡
+    type: place
+    aliases: [東田川]
+    weight: 1.4
+
+  - term: 西田川郡
+    type: place
+    aliases: [西田川]
+    weight: 1.4
+
+  - term: 最上郡
+    type: place
+    aliases: [最上]
+    weight: 1.4
+
+  - term: 北村山郡
+    type: place
+    aliases: [北村山]
+    weight: 1.4
+
+  - term: 東村山郡
+    type: place
+    aliases: [東村山]
+    weight: 1.4
+
+  - term: 南村山郡
+    type: place
+    aliases: [南村山]
+    weight: 1.4
+
+  - term: 西村山郡
+    type: place
+    aliases: [西村山]
+    weight: 1.4
+
+  - term: 西置賜郡
+    type: place
+    aliases: [西置賜]
+    weight: 1.4
+
+  - term: 東置賜郡
+    type: place
+    aliases: [東置賜]
+    weight: 1.4
+
+  - term: 南置賜郡
+    type: place
+    aliases: [南置賜]
+    weight: 1.4

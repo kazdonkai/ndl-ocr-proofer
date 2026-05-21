@@ -45,7 +45,7 @@ body {
   display: flex;
   align-items: center;
   padding: 0 20px;
-  z-index: 100;
+  z-index: 300;
   flex-shrink: 0;
 }
 
@@ -68,17 +68,45 @@ body {
   gap: 8px;
 }
 
+.search-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
 .search-input {
   background: var(--bg-dark);
   border: 1px solid var(--border);
   color: white;
-  padding: 6px 12px;
+  padding: 6px 28px 6px 12px;
   border-radius: 6px 0 0 6px;
   width: 400px;
   font-size: 0.85rem;
 }
 
-.search-input-history {
+.search-input-clear {
+  position: absolute;
+  right: 6px;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 0.95rem;
+  padding: 2px 4px;
+  line-height: 1;
+  border-radius: 3px;
+}
+.search-input-clear:hover {
+  color: white;
+  background: var(--border);
+}
+
+.history-dropdown-wrapper {
+  position: relative;
+  z-index: 1001;
+}
+
+.search-input-history-btn {
   background: var(--bg-dark);
   border: 1px solid var(--border);
   border-left: none;
@@ -87,15 +115,78 @@ body {
   padding: 6px;
   cursor: pointer;
   margin-left: -9px;
-  outline: none;
   width: 32px;
   text-align: center;
-  appearance: none;
-  -webkit-appearance: none;
+  outline: none;
 }
-.search-input-history:hover {
+.search-input-history-btn:hover,
+.search-input-history-btn.active {
   background: var(--border);
 }
+
+.history-dropdown-list {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 360px;
+  max-width: 600px;
+  max-height: 300px;
+  overflow-y: auto;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  z-index: 1000;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.8);
+}
+
+.history-dropdown-empty {
+  padding: 8px 12px;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.history-dropdown-item {
+  display: flex;
+  align-items: center;
+  padding: 5px 8px;
+  gap: 4px;
+}
+.history-dropdown-item:hover,
+.history-dropdown-item-focused {
+  background: var(--bg-dark);
+}
+.history-dropdown-item-focused {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.history-dropdown-item-name {
+  flex: 1;
+  cursor: pointer;
+  font-size: 0.82rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: white;
+  padding: 2px 0;
+}
+
+.history-dropdown-item-remove {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 0.9rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.history-dropdown-item-remove:hover {
+  background: #c0392b;
+  color: white;
+}
+
 
 .btn {
   background-color: var(--accent);
@@ -271,6 +362,11 @@ body {
 
 .setting-item {
   margin-bottom: 24px;
+}
+
+.setting-export-row {
+  display: flex;
+  gap: 8px;
 }
 
 .setting-item label {
@@ -628,6 +724,102 @@ body {
   font-weight: 600;
 }
 
+.page-jump-input {
+  width: 52px;
+  padding: 3px 6px;
+  background: var(--bg-dark);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--text-main);
+  font-size: 0.82rem;
+  text-align: center;
+  -moz-appearance: textfield;
+}
+.page-jump-input::-webkit-inner-spin-button,
+.page-jump-input::-webkit-outer-spin-button {
+  opacity: 1;
+}
+.page-jump-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.page-jump-sep {
+  font-size: 0.82rem;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+/* ========== 一括OCR コントロール ========== */
+.btn-bulk-ocr {
+  margin-left: 10px;
+  padding: 3px 10px;
+  font-size: 0.75rem;
+  background: rgba(59, 130, 246, 0.15);
+  border: 1px solid var(--accent);
+  border-radius: 5px;
+  color: var(--accent);
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+.btn-bulk-ocr:hover:not(:disabled) {
+  background: var(--accent);
+  color: white;
+}
+.btn-bulk-ocr:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.ocr-controls-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 14px;
+  background: rgba(59, 130, 246, 0.06);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  min-height: 32px;
+}
+
+.ocr-progress-track {
+  flex: 1;
+  max-width: 200px;
+  height: 6px;
+  background: var(--border);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.ocr-progress-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+.ocr-progress-fill.ocr-progress-done {
+  background: var(--success);
+}
+
+.ocr-progress-status {
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+.ocr-fallback-note {
+  font-size: 0.75rem;
+  color: var(--warning);
+  white-space: nowrap;
+}
+.ocr-error-inline {
+  font-size: 0.75rem;
+  color: var(--danger);
+  white-space: nowrap;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 4px;
+  padding: 1px 7px;
+}
+
 /* ========== シームレス表示 ========== */
 .image-container.seamless-scroll {
   display: flex;
@@ -862,4 +1054,133 @@ body {
   height: 1px;
   background: var(--border);
   margin: 6px 0;
+}
+
+/* ── Export dropdown ─────────────────────────────────────────────── */
+.export-dropdown-wrapper {
+  position: relative;
+}
+
+.export-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 160px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px;
+  z-index: 1001;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.55);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.export-menu-item {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  background: none;
+  border: none;
+  color: var(--text-main);
+  text-align: left;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 0.82rem;
+  transition: background 0.15s;
+}
+
+.export-menu-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* ── Document status select ────────────────────────────────────── */
+.doc-status-select-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.doc-status-label {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+}
+
+.doc-status-select {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  color: var(--text-main);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 0.72rem;
+  cursor: pointer;
+  outline: none;
+  min-width: 52px;
+  transition: border-color 0.15s;
+}
+
+.doc-status-select:hover {
+  border-color: var(--accent);
+}
+
+.doc-status-select:focus {
+  border-color: var(--accent);
+}
+
+.doc-status-select:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* ── Complete button ────────────────────────────────────────────── */
+.btn-complete {
+  background-color: transparent;
+  border: 1px solid var(--success);
+  color: var(--success);
+}
+.btn-complete:hover {
+  background-color: var(--success);
+  color: #0f172a;
+}
+
+/* ── Toast notification ──────────────────────────────────────────── */
+.app-toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #1e293b;
+  border: 1px solid var(--border);
+  color: var(--text-main);
+  font-size: 0.85rem;
+  padding: 8px 20px;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+  z-index: 9999;
+  pointer-events: none;
+  animation: toast-in 0.15s ease;
+}
+@keyframes toast-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(8px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+/* ── Settings text input ─────────────────────────────────────────── */
+.setting-text-input {
+  width: 100%;
+  background: var(--bg-dark);
+  border: 1px solid var(--border);
+  color: var(--text-main);
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 0.8rem;
+  margin-top: 4px;
+}
+.setting-hint {
+  display: block;
+  font-size: 0.68rem;
+  color: var(--text-dim);
+  margin-top: 2px;
 }

@@ -30,7 +30,7 @@ class DictionaryLoader:
         except ValueError:
             return default
 
-    def load_csv(self, file_path: Path) -> List[DictionaryTerm]:
+    def load_csv(self, file_path: Path, tier: str = "stable") -> List[DictionaryTerm]:
         """単一のCSVファイルを読み込み、厳密なバリデーションを行ってDictionaryTermのリストを返す"""
         loaded_terms = []
         
@@ -75,7 +75,8 @@ class DictionaryLoader:
                         priority=priority,
                         protect=protect,
                         source=row.get("source", "").strip(),
-                        approved=approved
+                        approved=approved,
+                        tier=tier,
                     )
                     loaded_terms.append(term_obj)
                     
@@ -92,7 +93,7 @@ class DictionaryLoader:
             return
             
         for csv_path in self.approved_dir.glob("*.csv"):
-            terms = self.load_csv(csv_path)
+            terms = self.load_csv(csv_path, tier="stable")
             self.terms.extend(terms)
 
         # 必要に応じて、同一 term + domain の完全重複をチェックしてマージ/警告する処理を追加可能
@@ -102,7 +103,7 @@ class DictionaryLoader:
         target_path = self.staging_dir / filename
         if not target_path.exists():
             raise FileNotFoundError(f"Staging file not found: {filename}")
-        return self.load_csv(target_path)
+        return self.load_csv(target_path, tier="experimental")
 
     def search_by_domain(self, domain: str) -> List[DictionaryTerm]:
         """特定の分野(domain)に合致する語彙リストを返すAPI"""

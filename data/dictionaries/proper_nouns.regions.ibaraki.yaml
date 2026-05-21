@@ -1,0 +1,90 @@
+version: 1
+# proper_nouns.regions.ibaraki.yaml — 茨城県地域限定辞書
+# 適用条件: frontmatter.region ∈ {茨城, 常陸} またはファイル名に茨城を含む場合
+
+entries:
+
+  # 1. 県名・旧国名
+
+  - term: 茨城県
+    type: place
+    aliases: [茨城]
+    weight: 1.5
+
+  - term: 常陸国
+    type: place
+    aliases: [常陸, 常州]
+    weight: 1.3
+    note: "旧国名"
+
+  # 2. 郡名
+
+  - term: 多賀郡
+    type: place
+    aliases: [多賀]
+    weight: 1.4
+
+  - term: 久慈郡
+    type: place
+    aliases: [久慈]
+    weight: 1.4
+
+  - term: 那珂郡
+    type: place
+    aliases: [那珂]
+    weight: 1.4
+
+  - term: 東茨城郡
+    type: place
+    aliases: [東茨城]
+    weight: 1.4
+
+  - term: 西茨城郡
+    type: place
+    aliases: [西茨城]
+    weight: 1.4
+
+  - term: 真壁郡
+    type: place
+    aliases: [真壁]
+    weight: 1.4
+
+  - term: 鹿島郡
+    type: place
+    aliases: [鹿島]
+    weight: 1.4
+
+  - term: 行方郡
+    type: place
+    aliases: [行方]
+    weight: 1.4
+
+  - term: 稲敷郡
+    type: place
+    aliases: [稲敷]
+    weight: 1.4
+
+  - term: 筑波郡
+    type: place
+    aliases: [筑波]
+    weight: 1.4
+
+  - term: 新治郡
+    type: place
+    aliases: [新治]
+    weight: 1.4
+
+  - term: 結城郡
+    type: place
+    aliases: [結城]
+    weight: 1.4
+
+  - term: 猿島郡
+    type: place
+    aliases: [猿島]
+    weight: 1.4
+
+  - term: 北相馬郡
+    type: place
+    aliases: [北相馬]
+    weight: 1.4

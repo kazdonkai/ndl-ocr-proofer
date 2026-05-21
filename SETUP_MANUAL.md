@@ -63,8 +63,9 @@ Files are searched recursively under `VAULT_ROOT`.
 
 ```bash
 cd proofreading-app/backend
-pip install -r requirements.txt
-python3 -m uvicorn main:app --reload --host 127.0.0.1 --port 8000
+python3 -m venv .venv                  # 初回のみ / First time only
+.venv/bin/pip install -r requirements.txt
+.venv/bin/python3 -m uvicorn main:app --reload --host 127.0.0.1 --port 8000
 ```
 
 起動後、`http://127.0.0.1:8000/docs` で Swagger UI を確認できます。  

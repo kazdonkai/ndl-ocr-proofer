@@ -7,4 +7,6 @@ term,normalized,variants,reading,category,domain,priority,protect,source,approve
 秣山,秣山,,まぐさやま,地目,村落史,0.8,true,auto-ocr,true
 炭焼,炭焼,,すみやき,産業,村落史,0.5,true,auto-ocr,true
 入合,入会,,いりあい,法制語,入会研究,0.8,true,auto-ocr,true
+入會,入会,,いりあい,法制語,入会研究,1.0,false,manual,true
 薪秣,薪秣,,しんまぐさ,地目,村落史,0.7,true,auto-ocr,true
+山諍,山論,,さんろん,法制語,入会研究,0.7,false,manual,true

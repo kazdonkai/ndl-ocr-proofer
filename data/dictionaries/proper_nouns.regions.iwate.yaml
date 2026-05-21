@@ -1,0 +1,91 @@
+version: 1
+# proper_nouns.regions.iwate.yaml — 岩手県地域限定辞書
+# 適用条件: frontmatter.region ∈ {岩手, 陸中, 陸前} またはファイル名に岩手を含む場合
+
+entries:
+
+  # 1. 県名・旧国名
+
+  - term: 岩手県
+    type: place
+    aliases: [岩手]
+    weight: 1.5
+
+  - term: 陸中国
+    type: place
+    aliases: [陸中, 陸州]
+    weight: 1.3
+    note: "旧国名"
+
+  - term: 陸前国
+    type: place
+    aliases: [陸前]
+    weight: 1.3
+    note: "旧国名（岩手県南部を含む）"
+
+  # 2. 郡名
+
+  - term: 二戸郡
+    type: place
+    aliases: [二戸]
+    weight: 1.4
+
+  - term: 九戸郡
+    type: place
+    aliases: [九戸]
+    weight: 1.4
+
+  - term: 下閉伊郡
+    type: place
+    aliases: [下閉伊]
+    weight: 1.4
+
+  - term: 上閉伊郡
+    type: place
+    aliases: [上閉伊]
+    weight: 1.4
+
+  - term: 岩手郡
+    type: place
+    aliases: [岩手]
+    weight: 1.4
+
+  - term: 紫波郡
+    type: place
+    aliases: [紫波]
+    weight: 1.4
+
+  - term: 稗貫郡
+    type: place
+    aliases: [稗貫]
+    weight: 1.4
+
+  - term: 和賀郡
+    type: place
+    aliases: [和賀]
+    weight: 1.4
+
+  - term: 胆沢郡
+    type: place
+    aliases: [胆沢]
+    weight: 1.4
+
+  - term: 江刺郡
+    type: place
+    aliases: [江刺]
+    weight: 1.4
+
+  - term: 西磐井郡
+    type: place
+    aliases: [西磐井]
+    weight: 1.4
+
+  - term: 東磐井郡
+    type: place
+    aliases: [東磐井]
+    weight: 1.4
+
+  - term: 気仙郡
+    type: place
+    aliases: [気仙]
+    weight: 1.4

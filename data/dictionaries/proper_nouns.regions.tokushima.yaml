@@ -1,0 +1,70 @@
+version: 1
+# proper_nouns.regions.tokushima.yaml — 徳島県地域限定辞書
+# 適用条件: frontmatter.region ∈ {徳島, 阿波} またはファイル名に徳島を含む場合
+
+entries:
+
+  # 1. 県名・旧国名
+
+  - term: 徳島県
+    type: place
+    aliases: [徳島]
+    weight: 1.5
+
+  - term: 阿波国
+    type: place
+    aliases: [阿波, 阿州]
+    weight: 1.3
+    note: "旧国名"
+
+  # 2. 郡名
+
+  - term: 板野郡
+    type: place
+    aliases: [板野]
+    weight: 1.4
+
+  - term: 阿波郡
+    type: place
+    aliases: [阿波]
+    weight: 1.4
+
+  - term: 麻植郡
+    type: place
+    aliases: [麻植]
+    weight: 1.4
+
+  - term: 美馬郡
+    type: place
+    aliases: [美馬]
+    weight: 1.4
+
+  - term: 三好郡
+    type: place
+    aliases: [三好]
+    weight: 1.4
+
+  - term: 名西郡
+    type: place
+    aliases: [名西]
+    weight: 1.4
+
+  - term: 名東郡
+    type: place
+    aliases: [名東]
+    weight: 1.4
+
+  - term: 勝浦郡
+    type: place
+    aliases: [勝浦]
+    weight: 1.4
+
+  - term: 那賀郡
+    type: place
+    aliases: [那賀]
+    weight: 1.4
+
+  - term: 海部郡
+    type: place
+    aliases: [海部]
+    weight: 1.4

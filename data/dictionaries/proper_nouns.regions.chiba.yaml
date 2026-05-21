@@ -1,0 +1,92 @@
+version: 1
+# proper_nouns.regions.chiba.yaml — 千葉県地域限定辞書
+# 適用条件: frontmatter.region ∈ {千葉, 上総, 下総, 安房} またはファイル名に千葉を含む場合
+
+entries:
+
+  # 1. 県名・旧国名
+
+  - term: 千葉県
+    type: place
+    aliases: [千葉]
+    weight: 1.5
+
+  - term: 上総国
+    type: place
+    aliases: [上総, 総州]
+    weight: 1.3
+    note: "旧国名"
+
+  - term: 下総国
+    type: place
+    aliases: [下総]
+    weight: 1.3
+    note: "旧国名"
+
+  - term: 安房国
+    type: place
+    aliases: [安房, 房州]
+    weight: 1.3
+    note: "旧国名"
+
+  # 2. 郡名
+
+  - term: 東葛飾郡
+    type: place
+    aliases: [東葛飾]
+    weight: 1.4
+
+  - term: 印旛郡
+    type: place
+    aliases: [印旛]
+    weight: 1.4
+
+  - term: 千葉郡
+    type: place
+    aliases: [千葉]
+    weight: 1.4
+
+  - term: 香取郡
+    type: place
+    aliases: [香取]
+    weight: 1.4
+
+  - term: 海上郡
+    type: place
+    aliases: [海上]
+    weight: 1.4
+
+  - term: 匝瑳郡
+    type: place
+    aliases: [匝瑳]
+    weight: 1.4
+
+  - term: 市原郡
+    type: place
+    aliases: [市原]
+    weight: 1.4
+
+  - term: 君津郡
+    type: place
+    aliases: [君津]
+    weight: 1.4
+
+  - term: 山武郡
+    type: place
+    aliases: [山武]
+    weight: 1.4
+
+  - term: 長生郡
+    type: place
+    aliases: [長生]
+    weight: 1.4
+
+  - term: 夷隅郡
+    type: place
+    aliases: [夷隅]
+    weight: 1.4
+
+  - term: 安房郡
+    type: place
+    aliases: [安房]
+    weight: 1.4

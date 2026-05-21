@@ -30,6 +30,20 @@ export async function runOcrForPage(id, page) {
   return await res.json();
 }
 
+export async function updateDocumentStatus(id, propertyName, value) {
+  const encodedId = encodeURIComponent(id);
+  const res = await fetch(`/api/document/${encodedId}/status`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ property_name: propertyName, value }),
+  });
+  if (!res.ok) {
+    const errData = await res.json();
+    throw new Error(errData.detail || 'ステータス更新に失敗しました');
+  }
+  return await res.json();
+}
+
 export async function saveDocumentPage(id, pageData) {
   const encodedId = encodeURIComponent(id);
   const res = await fetch(`/api/document/${encodedId}/save`, {

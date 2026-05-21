@@ -1,0 +1,97 @@
+version: 1
+# proper_nouns.regions.shizuoka.yaml — 静岡県地域限定辞書
+# 適用条件: frontmatter.region ∈ {静岡, 遠江, 駿河, 伊豆} またはファイル名に静岡を含む場合
+
+entries:
+
+  # 1. 県名・旧国名
+
+  - term: 静岡県
+    type: place
+    aliases: [静岡]
+    weight: 1.5
+
+  - term: 遠江国
+    type: place
+    aliases: [遠江, 遠州]
+    weight: 1.3
+    note: "旧国名（静岡県西部）"
+
+  - term: 駿河国
+    type: place
+    aliases: [駿河, 駿州]
+    weight: 1.3
+    note: "旧国名（静岡県中部）"
+
+  - term: 伊豆国
+    type: place
+    aliases: [伊豆, 豆州]
+    weight: 1.3
+    note: "旧国名（静岡県東部・伊豆半島）"
+
+  # 2. 郡名
+
+  - term: 賀茂郡
+    type: place
+    aliases: [賀茂]
+    weight: 1.4
+
+  - term: 田方郡
+    type: place
+    aliases: [田方]
+    weight: 1.4
+
+  - term: 駿東郡
+    type: place
+    aliases: [駿東]
+    weight: 1.4
+
+  - term: 富士郡
+    type: place
+    aliases: [富士]
+    weight: 1.4
+
+  - term: 庵原郡
+    type: place
+    aliases: [庵原]
+    weight: 1.4
+
+  - term: 安倍郡
+    type: place
+    aliases: [安倍]
+    weight: 1.4
+
+  - term: 志太郡
+    type: place
+    aliases: [志太]
+    weight: 1.4
+
+  - term: 榛原郡
+    type: place
+    aliases: [榛原]
+    weight: 1.4
+
+  - term: 小笠郡
+    type: place
+    aliases: [小笠]
+    weight: 1.4
+
+  - term: 周智郡
+    type: place
+    aliases: [周智]
+    weight: 1.4
+
+  - term: 磐田郡
+    type: place
+    aliases: [磐田]
+    weight: 1.4
+
+  - term: 浜名郡
+    type: place
+    aliases: [浜名]
+    weight: 1.4
+
+  - term: 引佐郡
+    type: place
+    aliases: [引佐]
+    weight: 1.4
