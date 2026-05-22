@@ -54,6 +54,28 @@ class CorrectionEntry(BaseModel):
     action_type: str = "accept"
 
 
+class RunOcrRequest(BaseModel):
+    status_property_name: str = "minji_status"
+
+
+class OcrSettings(BaseModel):
+    rename_images_before_ocr: bool = True
+    write_status_after_ocr: bool = True
+
+
+class UpdateOcrSettingsRequest(BaseModel):
+    rename_images_before_ocr: bool
+    write_status_after_ocr: bool
+
+
+class DictionarySettings(BaseModel):
+    use_experimental: bool = False
+
+
+class UpdateDictionarySettingsRequest(BaseModel):
+    use_experimental: bool
+
+
 class RunOcrPageRequest(BaseModel):
     page: int  # 1-based page number
 
@@ -127,6 +149,12 @@ class AnalyzedSpan(BaseModel):
     # candidate → hintSource mapping for soft-hint candidates (e.g. {"ヨリ": "manual_override_seed"}).
     # Empty for spans with no soft hints.  Frontend logs hintSource when user selects one of these.
     soft_hint_candidates: dict[str, str] = {}
+    # True when the rank-1 candidate is a proper noun (file_context_hint 由来の固有名詞).
+    # Used by is_dangerous to flag spans where over-correction risk is high.
+    rank1_is_proper_noun: bool = False
+    # True when the rank-1 candidate originates from shape_pairs lookup.
+    # Shape-pairs corrections are considered safe and excluded from the danger flag.
+    rank1_from_shape: bool = False
 
     @computed_field
     @property
@@ -136,7 +164,7 @@ class AnalyzedSpan(BaseModel):
     @computed_field
     @property
     def is_dangerous(self) -> bool:
-        return self.validation is not None and self.validation.verdict == "reject"
+        return self.rank1_is_proper_noun and not self.rank1_from_shape
 
     @computed_field
     @property

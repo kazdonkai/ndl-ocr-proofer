@@ -65,6 +65,12 @@ class AIAnalyzer:
 
         # TODO: 今後、LLMクライアント（OpenAI / Ollama）の初期化をここに追加する
 
+    def reload_dictionary(self, use_experimental: bool = False) -> None:
+        """辞書を再読み込みする。use_experimental=True のとき staging/ の experimental 辞書も追加する。"""
+        self.dictionary_loader.reload(use_experimental=use_experimental)
+        self.candidate_engine = CandidateEngine(self.dictionary_loader, shape_detector=self.shape_detector)
+        print(f"[AIAnalyzer] Dictionary reloaded (experimental={use_experimental}): {len(self.dictionary_loader.terms)} terms.")
+
     def detect_low_confidence_from_json(self, ocr_json: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
         ルールベース抽出:
@@ -546,6 +552,8 @@ class AIAnalyzer:
                     continue
                 occ_idx = occurrence_counters.get(text_span, 0)
                 occurrence_counters[text_span] = occ_idx + 1
+                rank1 = candidates[0] if candidates else ""
+                _shape_cands = self.shape_detector.lookup(text_span) if self.shape_detector else {}
                 results.append({
                     "suspect_span": text_span,
                     "start": pos,
@@ -558,6 +566,8 @@ class AIAnalyzer:
                     "validation": validation_dict,
                     "is_bigram_suspect": bool(span_data.get("_kata_bigram_candidate")),
                     "soft_hint_candidates": soft_hint_candidates,
+                    "rank1_is_proper_noun": bool(rank1 and proper_noun_terms and rank1 in proper_noun_terms),
+                    "rank1_from_shape": bool(rank1 and rank1 in _shape_cands),
                 })
                 search_pos = pos + len(text_span)
             # clean_text に出現しないスパン（OCR JSON 由来の文字が正規化後に消えた場合等）は除外
