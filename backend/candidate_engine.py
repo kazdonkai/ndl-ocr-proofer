@@ -8,7 +8,13 @@ if TYPE_CHECKING:
 
 
 def _dominant_script(text: str) -> str:
-    """Return the dominant script class of text: 'kanji', 'kana', or 'mixed'."""
+    """Return the dominant script class of text: 'ascii', 'kanji', 'kana', or 'mixed'.
+
+    'ascii' は text が ASCII 文字のみで構成される場合（英数字・記号など）。
+    この分類は bonus-only 候補の字種互換チェックで使用する。
+    """
+    if text and all(ord(c) < 128 for c in text):
+        return 'ascii'
     kanji = kana = 0
     for ch in text:
         n = unicodedata.name(ch, '')
@@ -29,11 +35,15 @@ def _dominant_script(text: str) -> str:
 def _compat_char_type(span: str, candidate: str) -> bool:
     """
     bonus-only 候補の字種互換チェック。
+    span が ASCII（英数字等）なら candidate も ASCII であること。
+      → 「2」「l」等の英数字誤認スパンに漢字語が bonus-only で滑り込まないよう遮断。
     span が漢字主体なら candidate にも漢字が含まれること、
     span がかな主体なら candidate にもかなが含まれることを要求する。
     """
     ds = _dominant_script(span)
     dc = _dominant_script(candidate)
+    if ds == 'ascii':
+        return dc == 'ascii'  # ASCII スパンに漢字・かな bonus-only 候補は不適
     if ds == 'kanji':
         return dc in ('kanji', 'mixed')
     if ds == 'kana':

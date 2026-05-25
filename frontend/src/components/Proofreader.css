@@ -350,13 +350,21 @@
 
 .manual-input-section {
   display: flex;
+  flex-direction: column;
   gap: 8px;
   border-top: 1px solid var(--border);
   padding-top: 12px;
 }
 
+.manual-input-buttons {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
 .manual-input {
-  flex: 1;
+  width: 100%;
+  box-sizing: border-box;
   background: var(--bg-dark);
   border: 1px solid var(--border);
   color: white;
@@ -412,6 +420,19 @@
   padding: 6px 8px;
   background: rgba(255,255,255,0.04);
   border-radius: 6px;
+}
+
+.tag-experimental-dict {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 5px;
+  font-size: 0.7rem;
+  border-radius: 3px;
+  background: rgba(180, 140, 60, 0.18);
+  color: #c8a84b;
+  border: 1px solid rgba(180, 140, 60, 0.35);
+  vertical-align: middle;
+  white-space: nowrap;
 }
 
 .btn-icon.popover-close {
@@ -922,6 +943,10 @@
   border-color: rgba(99, 102, 241, 0.45);
 }
 
+.crp-item.crp-bulk-norm .crp-suspect {
+  max-width: none;
+}
+
 .crp-main-row {
   display: flex;
   align-items: center;
@@ -1316,6 +1341,25 @@
   border: 1px solid rgba(148, 163, 184, 0.45);
 }
 
+/* ── File-level bulk katakana button ── */
+.btn-file-bulk-kata {
+  padding: 2px 8px;
+  background: rgba(52, 211, 153, 0.10);
+  border: 1px solid rgba(52, 211, 153, 0.35);
+  color: #34d399;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.70rem;
+  font-weight: 500;
+  transition: background 0.15s, border-color 0.15s;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.btn-file-bulk-kata:hover {
+  background: rgba(52, 211, 153, 0.20);
+  border-color: rgba(52, 211, 153, 0.60);
+}
+
 /* ── Particle normalization button (P6) ── */
 .particle-norm-btn {
   padding: 5px 12px;
@@ -1574,4 +1618,116 @@
 .proposals-image-none {
   font-size: 0.68rem;
   color: var(--text-dim);
+}
+
+/* ── Phase 1: Custom context menu ──────────────────────────────────────────── */
+.custom-context-menu {
+  position: fixed;
+  z-index: 9000;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+  padding: 4px 0;
+  min-width: 120px;
+}
+
+.context-menu-item {
+  display: block;
+  width: 100%;
+  background: none;
+  border: none;
+  color: var(--text-main);
+  padding: 8px 14px;
+  text-align: left;
+  cursor: pointer;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.context-menu-item:hover {
+  background: rgba(99, 102, 241, 0.15);
+}
+
+.context-menu-item--danger {
+  color: #f87171;
+}
+
+.context-menu-item--danger:hover {
+  background: rgba(248, 113, 113, 0.15);
+  color: #fca5a5;
+}
+
+/* ── Phase 1: Manual correction dialog input ───────────────────────────────── */
+.manual-correction-dialog .cad-row {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
+
+.manual-correction-input {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--bg-dark);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-main);
+  padding: 6px 10px;
+  font-size: 0.9rem;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.manual-correction-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+}
+
+/* ── 手動訂正後 temporary辞書登録プロンプト (Phase M-1) ────────────── */
+.manual-register-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.manual-register-badge {
+  font-size: 0.65rem;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(99, 102, 241, 0.18);
+  color: #a5b4fc;
+  border: 1px solid rgba(99, 102, 241, 0.35);
+  letter-spacing: 0.03em;
+}
+.manual-register-term-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.manual-register-input {
+  flex: 1;
+  min-width: 0;
+}
+.manual-register-arrow {
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  flex-shrink: 0;
+}
+.manual-register-result {
+  font-size: 0.78rem;
+  padding: 4px 8px;
+  border-radius: 5px;
+  margin-top: 2px;
+}
+.manual-register-result--ok {
+  background: rgba(52, 211, 153, 0.15);
+  color: #34d399;
+  border: 1px solid rgba(52, 211, 153, 0.3);
+}
+.manual-register-result--error {
+  background: rgba(248, 113, 113, 0.12);
+  color: #f87171;
+  border: 1px solid rgba(248, 113, 113, 0.3);
 }

@@ -18,9 +18,10 @@ export const DEFAULT_SETTINGS = {
     defaultBehavior: 'replace',
   },
   document: {
-    statusPropertyName: 'minji_status',
+    statusPropertyName: 'analyzed_status',
     completionStatusValue: 5,
     statusOptions: [1, 2, 3, 4, 5],
+    bulkKatakanaThreshold: 0.85,
   },
 };
 

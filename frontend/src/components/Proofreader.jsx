@@ -11,6 +11,7 @@ import {
   logSpanSkipped,
   logSpanRejected,
   logSpanAccepted,
+  logManualSelectionCorrected,
 } from '../services/learningEventLogger.js';
 
 const DEFAULT_KB = { nextSpan: 'n', prevSpan: 'p', openSpan: 'Enter' };
@@ -172,7 +173,7 @@ function scanParticleHighlights(text, rules = INITIAL_RULES) {
 }
 // ────────────────────────────────────────────────────────────────────────
 
-const Proofreader = forwardRef(function Proofreader({ document, currentPage, viewMode, onDocumentChange, onOcrChange, isOcrRunning, runOcr, runOcrPage, onCorrectionAccepted, keybindings = DEFAULT_KB, onNextPage, onPrevPage, onRemoveLastCorrection, onBulkSetPageCorrections }, ref) {
+const Proofreader = forwardRef(function Proofreader({ document, currentPage, viewMode, onDocumentChange, onOcrChange, isOcrRunning, runOcr, runOcrPage, onCorrectionAccepted, keybindings = DEFAULT_KB, onNextPage, onPrevPage, onRemoveLastCorrection, onBulkSetPageCorrections, bulkKatakanaThreshold = 0.85, onRegisterTemporaryTerm = null }, ref) {
   const [fullContent, setFullContent] = useState(document?.markdown_content || '');
   const [ocrContent, setOcrContent] = useState('');
   const [mode, setMode] = useState('preview'); // 'preview' = 疑義箇所チェック, 'edit' = エディタ
@@ -243,10 +244,30 @@ const Proofreader = forwardRef(function Proofreader({ document, currentPage, vie
       : 0,
     [ocrContent, documentStyleHints]
   );
+
   // 一括変換確認ダイアログ状態 — null | { count, chars: [{hira, kata, count}] }
   const [hiraAllConfirm, setHiraAllConfirm] = useState(null);
-  // 一括変換ログ — 補正一覧に summary 行として表示する { pageNum, count }[]
+  // 全ページ一括変換確認ダイアログ状態 — null | { totalCount, affectedPages: [{pageIndex, pageNum, count}], totalPages }
+  const [fileBulkHiraAllConfirm, setFileBulkHiraAllConfirm] = useState(null);
+  // 一括変換ログ — 補正一覧に summary 行として表示する { pageNum, count, isBulkFile? }[]
   const [hiraAllNormLog, setHiraAllNormLog] = useState([]);
+
+  // ─── Phase 1: Manual selection correction ────────────────────────────────
+  // コンテキストメニュー表示状態 — { x, y } | null
+  const [contextMenu, setContextMenu] = useState(null);
+  // 手動訂正ダイアログ状態 — { selectedText, selectionStart, selectionEnd } | null
+  const [manualCorrectionDialog, setManualCorrectionDialog] = useState(null);
+  // 手動訂正ダイアログの入力バッファ
+  const [manualCorrectionInput, setManualCorrectionInput] = useState('');
+  // Phase M-1: 手動訂正完了後の temporary辞書登録プロンプト
+  // { originalTerm: string, normalizedText: string } | null
+  const [manualRegisterPrompt, setManualRegisterPrompt] = useState(null);
+  const [manualRegisterForm, setManualRegisterForm] = useState({ term: '', normalized: '', category: '', note: '' });
+  const [manualRegisterStatus, setManualRegisterStatus] = useState(null); // null | 'pending' | 'ok' | 'error'
+  const [manualRegisterError, setManualRegisterError] = useState('');
+  // Phase 2 normalized input への遅延フォーカス用 ref（IME バッファ流入防止）
+  const manualRegisterNormalizedRef = useRef(null);
+  // ────────────────────────────────────────────────────────────────────────
 
   const textareaRef = useRef(null);
   const highlightLayerRef = useRef(null);
@@ -255,6 +276,8 @@ const Proofreader = forwardRef(function Proofreader({ document, currentPage, vie
   const performUndoRef = useRef(null);
   const performRedoRef = useRef(null);
   const importCorrectionsRef = useRef(null);
+  // Phase 1: openManualCorrectionDialog の stale closure 対策
+  const openManualCorrectionDialogRef = useRef(null);
   const popoverOpenedAtRef = useRef(null);
   const popoverDragOffsetRef = useRef({ x: 0, y: 0 });
   const popoverIsDraggingRef = useRef(false);
@@ -298,10 +321,31 @@ const Proofreader = forwardRef(function Proofreader({ document, currentPage, vie
   const [manualInput, setManualInput] = useState('');
   // 確定済み補正（P4 で実書き換えに昇格予定）
   const [acceptedCorrections, setAcceptedCorrections] = useState({});
+  // 除外済み span ID セット: 「除外」ボタンで reject した span を判定パネルから即時消去するために追跡
+  const [rejectedSpanIds, setRejectedSpanIds] = useState(new Set());
   // ページ別補正済みOCRテキストキャッシュ（ページ再訪時に補正結果を復元するため）
   const [pageOcrTextCache, setPageOcrTextCache] = useState({});
   // ページ別補正済みスパンキャッシュ（ページ再訪時に再解析をスキップして復元するため）
   const [pageAnalyzedSpansCache, setPageAnalyzedSpansCache] = useState({});
+
+  // ファイル全体のカナ文字比率: カタカナ÷(カタカナ+ひらがな) — 助詞判定に依存しない
+  const fileLevelKataRatio = useMemo(() => {
+    try {
+      const pages = document?.ocr_pages || [];
+      if (pages.length === 0) return null;
+      let hira = 0, kata = 0;
+      for (let i = 0; i < pages.length; i++) {
+        const raw = pageOcrTextCache[i] ?? pages[i]?.ocr_text;
+        const text = typeof raw === 'string' ? raw : '';
+        hira += (text.match(/[ぁ-ん]/g) || []).length;
+        kata += (text.match(/[ァ-ヶ]/g) || []).length;
+      }
+      const total = hira + kata;
+      return total > 0 ? kata / total : null;
+    } catch {
+      return null;
+    }
+  }, [document, pageOcrTextCache]);
 
   // 現在ページの補正済みスパン一覧（review panel 用）
   const reviewItems = useMemo(() =>
@@ -337,6 +381,7 @@ const Proofreader = forwardRef(function Proofreader({ document, currentPage, vie
   useEffect(() => {
     if (document) {
       setAcceptedCorrections({});
+      setRejectedSpanIds(new Set());
       setPageOcrTextCache({});
       setPageAnalyzedSpansCache({});
       setPopover(null);
@@ -403,10 +448,22 @@ const Proofreader = forwardRef(function Proofreader({ document, currentPage, vie
     setPopover(null);
     setLoadingAnalysis(true);
     try {
+      // 全ページテキストを結合して document_text として送信する。
+      // バックエンドの助詞スタイル判定（particle_script）はこの全文で行われるため、
+      // 助詞が少ない首紙・短ページでも文書全体のカタカナ優勢が正しく反映される。
+      const allPagesText = (document?.ocr_pages || [])
+        .map((p, i) => pageOcrTextCache[i] ?? p?.ocr_text ?? '')
+        .filter(Boolean)
+        .join('\n');
       const response = await fetch('/api/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ markdown_content: text, ocr_json: ocr, frontmatter: document?.frontmatter ?? null })
+        body: JSON.stringify({
+          markdown_content: text,
+          ocr_json: ocr,
+          frontmatter: document?.frontmatter ?? null,
+          document_text: allPagesText || null,
+        })
       });
       const data = await response.json();
       if (!preserveContent && (isInitialLoad || mode === 'preview')) {
@@ -522,6 +579,18 @@ const Proofreader = forwardRef(function Proofreader({ document, currentPage, vie
           }
           return;
         }
+        // ArrowDown / ArrowUp: 候補プレビュー移動（確定しない）
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+          e.preventDefault();
+          const candidates = (popover.span.candidates || []).filter(c => c !== '');
+          if (candidates.length === 0) return;
+          const curr = popoverCandidateIndex >= 0 ? popoverCandidateIndex : -1;
+          const next = e.key === 'ArrowDown'
+            ? Math.min(curr + 1, candidates.length - 1)
+            : Math.max(curr - 1, 0);
+          setPopoverCandidateIndex(next);
+          return;
+        }
         return; // ポップオーバー表示中は他のキーをブロック
       }
 
@@ -592,6 +661,27 @@ const Proofreader = forwardRef(function Proofreader({ document, currentPage, vie
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, []);
+
+  // Phase 1: Ctrl+M で手動訂正ダイアログを起動（Cmd+M は macOS minimize と衝突するため対象外）
+  // ref 経由で呼ぶことで stale closure を回避する
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.ctrlKey && !e.metaKey && e.key === 'm') {
+        e.preventDefault();
+        openManualCorrectionDialogRef.current?.();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
+
+  // Phase 1: コンテキストメニューをドキュメント外クリックで閉じる
+  useEffect(() => {
+    if (!contextMenu) return;
+    const handler = () => setContextMenu(null);
+    window.document.addEventListener('mousedown', handler);
+    return () => window.document.removeEventListener('mousedown', handler);
+  }, [contextMenu]);
 
   useEffect(() => {
     if (!processingDropdownOpen) return;
@@ -710,26 +800,29 @@ const Proofreader = forwardRef(function Proofreader({ document, currentPage, vie
         popoverOpenMs,
         dismissTrigger: trigger,
         candidatesViewed: popover.span.candidates?.length ?? 0,
+        rank1FromExperimental: popover.span.rank1_from_experimental_dict ?? null,
       });
     }
     setPopover(null);
     setPopoverCandidateIndex(-1);
   };
 
-  // top1 候補の却下: 補正は適用せず、ログのみ記録してポップオーバーを閉じる
-  // reject_target は常に "top1"（span全体の否定ではなく、先頭候補1件の却下）
-  const handleRejectTop1 = () => {
+  // active 候補の却下: 補正は適用せず、ログのみ記録してポップオーバーを閉じる
+  // reject_target スキーマは learningEventLogger 側で "top1" 固定（変更不要）
+  // candidate: 現在 active（keyboard-selected または先頭）の候補テキスト
+  const handleRejectActive = (candidate) => {
     if (!popover) return;
-    const candidates = popover.span.candidates || [];
-    const top1 = candidates[0] ?? null;
     logSpanRejected({
       docId: document?.doc_id ?? '',
       spanId: popover.spanId,
       suspectSpan: popover.span.suspect_span,
       isDangerous: popover.span.is_dangerous ?? false,
-      rejectedCandidate: top1,
+      rejectedCandidate: candidate,
       tier: null,
+      rank1FromExperimental: popover.span.rank1_from_experimental_dict ?? null,
     });
+    // 除外済みとして記録 → 判定パネルから即時消去
+    setRejectedSpanIds(prev => new Set([...prev, popover.spanId]));
     dismissPopover('reject');
   };
 
@@ -760,6 +853,7 @@ const Proofreader = forwardRef(function Proofreader({ document, currentPage, vie
       dismissedDangerFlag: (popover.span.is_dangerous ?? false) && candidateRank !== -1,
       candidateRank,
       hintSource: popover.span.soft_hint_candidates?.[candidate] ?? null,
+      rank1FromExperimental: popover.span.rank1_from_experimental_dict ?? null,
     });
 
     const newSpans = analyzedSpans
@@ -1002,6 +1096,20 @@ const Proofreader = forwardRef(function Proofreader({ document, currentPage, vie
       // 候補 0 件の場合は何もしない（要件 3）
     }
   }, [manualDocType]);
+
+  // Phase M-1: manualRegisterPrompt が立ったとき、normalized input に遅延フォーカス
+  // autoFocus は使わず 150ms 待機してから focus+select
+  // → Phase 1 の IME 確定 Enter で生じる IME バッファ流入を防ぐ
+  useEffect(() => {
+    if (!manualRegisterPrompt) return;
+    const timer = setTimeout(() => {
+      if (manualRegisterNormalizedRef.current) {
+        manualRegisterNormalizedRef.current.focus();
+        manualRegisterNormalizedRef.current.select();
+      }
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [manualRegisterPrompt]);
   // ────────────────────────────────────────────────────────────────────────
 
   // ─── Particle Normalization ──────────────────────────────────────────────
@@ -1070,6 +1178,66 @@ const Proofreader = forwardRef(function Proofreader({ document, currentPage, vie
     setHiraAllConfirm({ count: chars.reduce((n, c) => n + c.count, 0), chars });
   };
 
+  // ─── 全ページ一括ひらがな→カタカナ変換 ────────────────────────────────────
+  const handleFileBulkHiraAllPreview = () => {
+    const pages = document?.ocr_pages || [];
+    let totalCount = 0;
+    const affectedPages = [];
+    for (let i = 0; i < pages.length; i++) {
+      const text = pageOcrTextCache[i] ?? pages[i]?.ocr_text ?? '';
+      const count = countHiraAll(text);
+      if (count > 0) affectedPages.push({ pageIndex: i, pageNum: i + 1, count });
+      totalCount += count;
+    }
+    setFileBulkHiraAllConfirm({ totalCount, affectedPages, totalPages: pages.length });
+  };
+
+  const executeFileBulkHiraAll = () => {
+    if (!fileBulkHiraAllConfirm) return;
+    const pages = document?.ocr_pages || [];
+    const beforeCache = { ...pageOcrTextCache };
+    const afterCache = { ...pageOcrTextCache };
+    const affectedIndices = [];
+
+    for (let i = 0; i < pages.length; i++) {
+      const oldText = pageOcrTextCache[i] ?? pages[i]?.ocr_text ?? '';
+      const newText = applyHiraAll(oldText);
+      if (newText !== oldText) {
+        afterCache[i] = newText;
+        affectedIndices.push(i);
+      }
+    }
+
+    const newCurrentOcr = afterCache[currentPage] ?? ocrContent;
+    const totalConverted = fileBulkHiraAllConfirm.totalCount;
+
+    setHistoryStack(prev => [...prev, {
+      before: { ocrContent, analyzedSpans, acceptedCorrections, pageOcrTextCache: beforeCache, pageAnalyzedSpansCache },
+      after: { ocrContent: newCurrentOcr, analyzedSpans: [], acceptedCorrections, pageOcrTextCache: afterCache, pageAnalyzedSpansCache: {} },
+      page: currentPage,
+      pageNum: currentPage + 1,
+      isFileBulkHiraAllNorm: true,
+      affectedPageIndices: affectedIndices,
+      fileBulkHiraAllCount: totalConverted,
+    }]);
+    setRedoStack([]);
+
+    setPageOcrTextCache(afterCache);
+    setPageAnalyzedSpansCache({});
+    if (afterCache[currentPage] !== undefined) {
+      setOcrContent(afterCache[currentPage]);
+      setAnalyzedSpans([]);
+    }
+
+    for (const idx of affectedIndices) {
+      if (onOcrChange) onOcrChange(afterCache[idx], idx + 1);
+    }
+
+    setHiraAllNormLog(prev => [...prev, { pageNum: null, count: totalConverted, isBulkFile: true }]);
+    setFileBulkHiraAllConfirm(null);
+    setPopover(null);
+  };
+
   const executeHiraAllNorm = () => {
     if (!hiraAllConfirm) return;
     const pageNum = currentPage + 1;
@@ -1134,6 +1302,16 @@ const Proofreader = forwardRef(function Proofreader({ document, currentPage, vie
           ?? document?.ocr_pages?.[pageNum - 1]?.ocr_text ?? '';
         if (onOcrChange) onOcrChange(beforeOcr, pageNum);
       });
+    } else if (entry.isFileBulkHiraAllNorm) {
+      for (const idx of (entry.affectedPageIndices || [])) {
+        const beforeText = entry.before.pageOcrTextCache[idx]
+          ?? document?.ocr_pages?.[idx]?.ocr_text ?? '';
+        if (onOcrChange) onOcrChange(beforeText, idx + 1);
+      }
+      setHiraAllNormLog(prev => {
+        const lastIdx = prev.length - 1 - [...prev].reverse().findIndex(e => e.isBulkFile);
+        return lastIdx < 0 || !prev[lastIdx]?.isBulkFile ? prev : prev.filter((_, i) => i !== lastIdx);
+      });
     } else {
       const beforeOcr = entry.before.pageOcrTextCache[entry.page]
         ?? document?.ocr_pages?.[entry.page]?.ocr_text ?? '';
@@ -1154,6 +1332,8 @@ const Proofreader = forwardRef(function Proofreader({ document, currentPage, vie
           const idx = prev.map(e => e.pageNum).lastIndexOf(entry.pageNum);
           return idx === -1 ? prev : prev.filter((_, i) => i !== idx);
         });
+      } else if (entry.isManualSelection) {
+        // Phase 1: 手動選択補正は correction_events への span 単位通知不要
       } else {
         if (onRemoveLastCorrection) onRemoveLastCorrection(entry.pageNum, entry.spanId);
       }
@@ -1173,7 +1353,7 @@ const Proofreader = forwardRef(function Proofreader({ document, currentPage, vie
     if (entry.page === currentPage) {
       setOcrContent(entry.after.ocrContent);
       setAnalyzedSpans(entry.after.analyzedSpans);
-      if (entry.isCleanup || entry.isParticleNorm || entry.isHiraAllNorm) {
+      if (entry.isCleanup || entry.isParticleNorm || entry.isHiraAllNorm || entry.isFileBulkHiraAllNorm) {
         analyzeText(entry.after.ocrContent, document?.ocr_json, false, true);
       }
     }
@@ -1184,6 +1364,12 @@ const Proofreader = forwardRef(function Proofreader({ document, currentPage, vie
         const afterOcr = entry.after.pageOcrTextCache[pageNum - 1] ?? '';
         if (onOcrChange) onOcrChange(afterOcr, pageNum);
       });
+    } else if (entry.isFileBulkHiraAllNorm) {
+      for (const idx of (entry.affectedPageIndices || [])) {
+        const afterText = entry.after.pageOcrTextCache[idx] ?? '';
+        if (onOcrChange) onOcrChange(afterText, idx + 1);
+      }
+      setHiraAllNormLog(prev => [...prev, { pageNum: null, count: entry.fileBulkHiraAllCount ?? 0, isBulkFile: true }]);
     } else {
       if (onOcrChange) onOcrChange(entry.after.ocrContent, entry.pageNum);
       if (entry.isCleanup) {
@@ -1198,6 +1384,8 @@ const Proofreader = forwardRef(function Proofreader({ document, currentPage, vie
         entry.correctionEntries.forEach(ce => {
           if (onCorrectionAccepted) onCorrectionAccepted(ce, entry.pageNum);
         });
+      } else if (entry.isManualSelection) {
+        // Phase 1: 手動選択補正は correction_events への span 単位通知不要
       } else {
         if (onCorrectionAccepted) onCorrectionAccepted(entry.correctionEntry, entry.pageNum);
       }
@@ -1395,6 +1583,214 @@ const Proofreader = forwardRef(function Proofreader({ document, currentPage, vie
   };
   importCorrectionsRef.current = importCorrections;
 
+  // ─── Phase 1: Manual selection correction ────────────────────────────────
+
+  /** textarea の現在選択範囲を取得。選択なし・テキストなしなら null を返す。 */
+  const getTextareaSelection = () => {
+    const ta = textareaRef.current;
+    if (!ta) return null;
+    const start = ta.selectionStart;
+    const end = ta.selectionEnd;
+    if (start === end) return null;
+    const text = mode === 'preview' ? ocrContent : fullContent;
+    const selectedText = text.slice(start, end);
+    if (!selectedText) return null;
+    return { selectedText, selectionStart: start, selectionEnd: end };
+  };
+
+  /** 手動訂正ダイアログを開く（選択なしなら何もしない）。 */
+  const openManualCorrectionDialog = () => {
+    const sel = getTextareaSelection();
+    if (!sel) return;
+    setManualCorrectionDialog(sel);
+    setManualCorrectionInput(sel.selectedText);
+    setContextMenu(null);
+  };
+  // Ctrl+M useEffect から stale closure を回避するため毎レンダーで更新
+  openManualCorrectionDialogRef.current = openManualCorrectionDialog;
+
+  /** 手動訂正を実行し、OCR テキスト・スパン・履歴を更新する。 */
+  const executeManualCorrection = () => {
+    if (!manualCorrectionDialog) return;
+    const { selectedText, selectionStart, selectionEnd } = manualCorrectionDialog;
+    const correctedText = manualCorrectionInput;
+
+    // 観測ログ記録（user_actions.jsonl へ；A〜I 指標外）
+    logManualSelectionCorrected({
+      docId: document?.doc_id ?? '',
+      selectedText,
+      correctedText,
+      selectionStart,
+      selectionEnd,
+    });
+
+    if (mode === 'preview') {
+      const newOcr = ocrContent.slice(0, selectionStart) + correctedText + ocrContent.slice(selectionEnd);
+      const delta = correctedText.length - (selectionEnd - selectionStart);
+
+      // 編集区間に重なるスパンは無効化、後続スパンはシフト
+      const newSpans = analyzedSpans.reduce((acc, sp) => {
+        if (sp.end <= selectionStart) {
+          acc.push(sp);
+        } else if (sp.start >= selectionEnd) {
+          acc.push({ ...sp, start: sp.start + delta, end: sp.end + delta });
+        }
+        // [selectionStart, selectionEnd) に重なるスパンは除去
+        return acc;
+      }, []);
+
+      const pageNum = currentPage + 1;
+      const newCache = { ...pageOcrTextCache, [currentPage]: newOcr };
+      const newSpansCache = { ...pageAnalyzedSpansCache, [currentPage]: newSpans };
+
+      setHistoryStack(prev => [...prev, {
+        before: { ocrContent, analyzedSpans, acceptedCorrections, pageOcrTextCache, pageAnalyzedSpansCache },
+        after: { ocrContent: newOcr, analyzedSpans: newSpans, acceptedCorrections, pageOcrTextCache: newCache, pageAnalyzedSpansCache: newSpansCache },
+        page: currentPage,
+        pageNum,
+        isManualSelection: true,
+      }]);
+      setRedoStack([]);
+
+      setOcrContent(newOcr);
+      setAnalyzedSpans(newSpans);
+      setPageOcrTextCache(newCache);
+      setPageAnalyzedSpansCache(newSpansCache);
+
+      if (Number.isInteger(pageNum) && pageNum >= 1) {
+        if (onOcrChange) onOcrChange(newOcr, pageNum);
+      }
+
+      // 1.5秒デバウンスで再解析（handleTextChange と同じ方式）
+      if (analyzeDebounceRef.current) clearTimeout(analyzeDebounceRef.current);
+      analyzeDebounceRef.current = setTimeout(() => {
+        analyzeText(newOcr, document?.ocr_json, false, true);
+      }, 1500);
+    }
+
+    // Phase M-1: 実際に文字が変化した場合のみ temporary辞書登録プロンプトを表示する
+    // ・onRegisterTemporaryTerm が渡されていない場合は従来通り即クローズ
+    // ・selectedText === correctedText（無変化）や空文字への削除は対象外
+    const changed = correctedText.trim() !== '' && correctedText !== selectedText;
+    if (changed && onRegisterTemporaryTerm) {
+      setManualRegisterPrompt({ originalTerm: selectedText, normalizedText: correctedText });
+      setManualRegisterForm({ term: selectedText, normalized: correctedText, category: '', note: '' });
+      setManualRegisterStatus(null);
+      setManualRegisterError('');
+      // ダイアログ自体はまだ開いたまま（Phase 2 へ切替）
+    } else {
+      setManualCorrectionDialog(null);
+      setManualCorrectionInput('');
+    }
+  };
+
+  /** 手動訂正ダイアログ（Phase 1 / Phase 2 両方）を完全にクローズする。 */
+  const closeManualDialog = () => {
+    setManualCorrectionDialog(null);
+    setManualCorrectionInput('');
+    setManualRegisterPrompt(null);
+    setManualRegisterForm({ term: '', normalized: '', category: '', note: '' });
+    setManualRegisterStatus(null);
+    setManualRegisterError('');
+  };
+
+  /** 手動訂正後の temporary辞書登録を実行する。 */
+  const handleManualRegisterSubmit = async () => {
+    if (!manualRegisterForm.term.trim() || !manualRegisterForm.normalized.trim()) return;
+    setManualRegisterStatus('pending');
+    setManualRegisterError('');
+    try {
+      await onRegisterTemporaryTerm({
+        term: manualRegisterForm.term.trim(),
+        normalized: manualRegisterForm.normalized.trim(),
+        category: manualRegisterForm.category.trim(),
+        note: manualRegisterForm.note.trim(),
+      });
+      setManualRegisterStatus('ok');
+      setTimeout(() => closeManualDialog(), 1500);
+    } catch (err) {
+      setManualRegisterStatus('error');
+      setManualRegisterError(err.message ?? '登録失敗');
+    }
+  };
+
+  /** 選択範囲を直接削除する（ダイアログなし）。 */
+  const handleManualDeletion = () => {
+    const sel = getTextareaSelection();
+    if (!sel) return;
+    const { selectedText, selectionStart, selectionEnd } = sel;
+
+    logManualSelectionCorrected({
+      docId: document?.doc_id ?? '',
+      selectedText,
+      correctedText: '',
+      selectionStart,
+      selectionEnd,
+    });
+
+    if (mode === 'preview') {
+      const newOcr = ocrContent.slice(0, selectionStart) + ocrContent.slice(selectionEnd);
+      const delta = -(selectionEnd - selectionStart);
+
+      const newSpans = analyzedSpans.reduce((acc, sp) => {
+        if (sp.end <= selectionStart) {
+          acc.push(sp);
+        } else if (sp.start >= selectionEnd) {
+          acc.push({ ...sp, start: sp.start + delta, end: sp.end + delta });
+        }
+        // [selectionStart, selectionEnd) に重なるスパンは除去
+        return acc;
+      }, []);
+
+      const pageNum = currentPage + 1;
+      const newCache = { ...pageOcrTextCache, [currentPage]: newOcr };
+      const newSpansCache = { ...pageAnalyzedSpansCache, [currentPage]: newSpans };
+
+      setHistoryStack(prev => [...prev, {
+        before: { ocrContent, analyzedSpans, acceptedCorrections, pageOcrTextCache, pageAnalyzedSpansCache },
+        after: { ocrContent: newOcr, analyzedSpans: newSpans, acceptedCorrections, pageOcrTextCache: newCache, pageAnalyzedSpansCache: newSpansCache },
+        page: currentPage,
+        pageNum,
+        isManualSelection: true,
+      }]);
+      setRedoStack([]);
+
+      setOcrContent(newOcr);
+      setAnalyzedSpans(newSpans);
+      setPageOcrTextCache(newCache);
+      setPageAnalyzedSpansCache(newSpansCache);
+
+      if (Number.isInteger(pageNum) && pageNum >= 1) {
+        if (onOcrChange) onOcrChange(newOcr, pageNum);
+      }
+
+      if (analyzeDebounceRef.current) clearTimeout(analyzeDebounceRef.current);
+      analyzeDebounceRef.current = setTimeout(() => {
+        analyzeText(newOcr, document?.ocr_json, false, true);
+      }, 1500);
+    }
+
+    setContextMenu(null);
+  };
+
+  /** textarea / highlight-span の onContextMenu ハンドラ（選択なしなら早期 return）。 */
+  const handleEditorContextMenu = (e) => {
+    const sel = getTextareaSelection();
+    if (!sel) return; // 選択なし: ブラウザ標準メニューを維持
+    e.preventDefault();
+    setContextMenu({ x: e.clientX, y: e.clientY });
+  };
+
+  const handleHighlightSpanContextMenu = (e) => {
+    const sel = getTextareaSelection();
+    if (!sel) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({ x: e.clientX, y: e.clientY });
+  };
+
+  // ────────────────────────────────────────────────────────────────────────
+
   useImperativeHandle(ref, () => ({
     importCorrections: (...args) => importCorrectionsRef.current?.(...args),
   }), []);
@@ -1491,6 +1887,7 @@ const Proofreader = forwardRef(function Proofreader({ document, currentPage, vie
               blinkingSpanId === span.id ? 'highlight-blink' : '',
             ].filter(Boolean).join(' ')}
             onClick={(e) => handleSpanClick(e, span)}
+            onContextMenu={handleHighlightSpanContextMenu}
           >
             {content.slice(spanStart, spanEnd)}
           </span>
@@ -1561,7 +1958,8 @@ const Proofreader = forwardRef(function Proofreader({ document, currentPage, vie
   const renderCorrectionsList = () => {
     const currentPageNum = currentPage + 1;
     const hiraAllEntries = hiraAllNormLog.filter(e => e.pageNum === currentPageNum);
-    if (reviewItems.length === 0 && hiraAllEntries.length === 0) {
+    const fileBulkEntries = hiraAllNormLog.filter(e => e.isBulkFile);
+    if (reviewItems.length === 0 && hiraAllEntries.length === 0 && fileBulkEntries.length === 0) {
       return (
         <div className="crp-empty">
           {loadingAnalysis ? '' : totalSpans === 0 ? 'このページに疑義語はありません' : 'まだ補正されていません'}
@@ -1570,6 +1968,16 @@ const Proofreader = forwardRef(function Proofreader({ document, currentPage, vie
     }
     return (
       <div className="crp-list">
+        {fileBulkEntries.map((entry, i) => (
+          <div key={`file-bulk-${i}`} className="crp-item crp-bulk-norm">
+            <div className="crp-main-row">
+              <span className="crp-suspect">全カタカナ一括</span>
+              <span className="crp-arrow">→</span>
+              <span className="crp-chosen">カタカナ</span>
+            </div>
+            <span className="crp-occ">{entry.count}文字</span>
+          </div>
+        ))}
         {hiraAllEntries.map((entry, i) => (
           <div key={`hira-all-${i}`} className="crp-item crp-bulk-norm">
             <div className="crp-main-row">
@@ -1646,6 +2054,15 @@ const Proofreader = forwardRef(function Proofreader({ document, currentPage, vie
                     ? `混在（カタカナ${Math.round(documentStyleHints.kata_ratio * 100)}% / ひらがな${Math.round((1 - documentStyleHints.kata_ratio) * 100)}%）`
                     : '—'}
             </span>
+          )}
+          {mode === 'preview' && fileLevelKataRatio !== null && fileLevelKataRatio >= bulkKatakanaThreshold && (
+            <button
+              className="btn-file-bulk-kata"
+              onClick={handleFileBulkHiraAllPreview}
+              title={`ファイル全ページのひらがなをカタカナに一括変換します（カナ文字カタカナ比率 ${Math.round(fileLevelKataRatio * 100)}%）`}
+            >
+              全ページ カタカナ化
+            </button>
           )}
           <div className="toolbar-spacer" />
           {mode === 'preview' && totalSpans > 0 && (
@@ -1769,13 +2186,14 @@ const Proofreader = forwardRef(function Proofreader({ document, currentPage, vie
             </div>
           ) : (
             <div className={`editor-composite-container${writingMode === 'vertical' ? ' vertical' : ''}`}>
-              <div className="highlight-layer" ref={highlightLayerRef}>{renderHighlights(mode === 'preview' ? ocrContent : fullContent)}</div>
+              <div className="highlight-layer" ref={highlightLayerRef}>{mode === 'preview' ? renderHighlights(ocrContent) : null}</div>
               <textarea
                 ref={textareaRef}
                 className="text-editor-integrated"
                 value={mode === 'preview' ? ocrContent : fullContent}
                 onChange={handleTextChange}
                 onScroll={handleScroll}
+                onContextMenu={handleEditorContextMenu}
                 spellCheck={false}
                 placeholder={mode === 'preview' ? "OCRテキストがありません" : "Markdownテキストを入力..."}
               />
@@ -1793,7 +2211,7 @@ const Proofreader = forwardRef(function Proofreader({ document, currentPage, vie
                     <button
                       className={`sidebar-tab-btn${activeTab === 'corrections' ? ' active' : ''}`}
                       onClick={() => setActiveTab('corrections')}
-                    >補正{(reviewItems.length + hiraAllNormLog.filter(e => e.pageNum === currentPage + 1).length) > 0 ? ` (${reviewItems.length + hiraAllNormLog.filter(e => e.pageNum === currentPage + 1).length})` : ''}</button>
+                    >補正{(reviewItems.length + hiraAllNormLog.filter(e => e.pageNum === currentPage + 1 || e.isBulkFile).length) > 0 ? ` (${reviewItems.length + hiraAllNormLog.filter(e => e.pageNum === currentPage + 1 || e.isBulkFile).length})` : ''}</button>
                     <button
                       className={`sidebar-tab-btn${activeTab === 'proposals' ? ' active' : ''}`}
                       onClick={() => setActiveTab('proposals')}
@@ -1812,6 +2230,7 @@ const Proofreader = forwardRef(function Proofreader({ document, currentPage, vie
                         hiraAllCount={hiraAllCount}
                         onHiraAllNorm={handleHiraAllNormPreview}
                         acceptedCorrections={acceptedCorrections}
+                        rejectedSpanIds={rejectedSpanIds}
                       />
                     )}
                   </div>
@@ -1828,7 +2247,7 @@ const Proofreader = forwardRef(function Proofreader({ document, currentPage, vie
                     }
                   >
                     <button className="sidebar-acc-header" onClick={() => toggleSection('corrections')}>
-                      <span>補正一覧{(reviewItems.length + hiraAllNormLog.filter(e => e.pageNum === currentPage + 1).length) > 0 ? ` (${reviewItems.length + hiraAllNormLog.filter(e => e.pageNum === currentPage + 1).length})` : ''}</span>
+                      <span>補正一覧{(reviewItems.length + hiraAllNormLog.filter(e => e.pageNum === currentPage + 1 || e.isBulkFile).length) > 0 ? ` (${reviewItems.length + hiraAllNormLog.filter(e => e.pageNum === currentPage + 1 || e.isBulkFile).length})` : ''}</span>
                       <span className="acc-chevron">{sectionsOpen.corrections ? '▾' : '▸'}</span>
                     </button>
                     {sectionsOpen.corrections && (
@@ -1857,6 +2276,7 @@ const Proofreader = forwardRef(function Proofreader({ document, currentPage, vie
                           hiraAllCount={hiraAllCount}
                           onHiraAllNorm={handleHiraAllNormPreview}
                           acceptedCorrections={acceptedCorrections}
+                          rejectedSpanIds={rejectedSpanIds}
                         />
                       </div>
                     )}
@@ -2055,6 +2475,187 @@ const Proofreader = forwardRef(function Proofreader({ document, currentPage, vie
         </div>
       )}
 
+      {fileBulkHiraAllConfirm !== null && (
+        <div className="change-all-overlay" onClick={() => setFileBulkHiraAllConfirm(null)}>
+          <div className="change-all-dialog particle-norm-dialog" onClick={e => e.stopPropagation()}>
+            <div className="cad-header">全ページ ひらがな → カタカナ 一括変換</div>
+            {fileBulkHiraAllConfirm.totalCount === 0 ? (
+              <>
+                <div className="cleanup-no-match">変換対象のひらがなは全ページで検出されませんでした</div>
+                <div className="cad-actions">
+                  <button className="cad-cancel" onClick={() => setFileBulkHiraAllConfirm(null)}>閉じる</button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="cad-body">
+                  <div className="pn-line-stats">
+                    <span className="pn-stat-item pn-stat-target">
+                      対象 <strong>{fileBulkHiraAllConfirm.affectedPages.length}</strong> ページ
+                      &nbsp;/&nbsp;計 <strong>{fileBulkHiraAllConfirm.totalCount}</strong> 文字
+                    </span>
+                  </div>
+                  <div className="cleanup-summary">
+                    全 {fileBulkHiraAllConfirm.totalPages} ページを対象に変換します
+                  </div>
+                  <div className="cleanup-undo-note">Ctrl+Z で元に戻せます</div>
+                </div>
+                <div className="cad-actions">
+                  <button className="cad-cancel" onClick={() => setFileBulkHiraAllConfirm(null)}>キャンセル</button>
+                  <button className="cad-confirm" onClick={executeFileBulkHiraAll}>変換を実行</button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Phase 1: カスタム右クリックメニュー（選択テキストがある場合のみ表示） */}
+      {contextMenu && (
+        <div
+          className="custom-context-menu"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          onMouseDown={e => e.stopPropagation()}
+        >
+          {/* メニュー項目配列形式で定義。 */}
+          {[
+            { label: '手動訂正', action: openManualCorrectionDialog },
+            { label: '削除', action: handleManualDeletion, danger: true },
+          ].map(item => (
+            <button
+              key={item.label}
+              className={`context-menu-item${item.danger ? ' context-menu-item--danger' : ''}`}
+              onClick={item.action}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Phase 1: 手動訂正ダイアログ */}
+      {manualCorrectionDialog && (
+        <div
+          className="change-all-overlay"
+          onClick={closeManualDialog}
+        >
+          <div className="change-all-dialog manual-correction-dialog" onClick={e => e.stopPropagation()}>
+
+            {/* ── Phase 1: 訂正入力 ── */}
+            {!manualRegisterPrompt && (
+              <>
+                <div className="cad-header">手動訂正</div>
+                <div className="cad-body">
+                  <div className="cad-row">
+                    <span className="cad-label">選択テキスト</span>
+                    <span className="cad-value">「{manualCorrectionDialog.selectedText}」</span>
+                  </div>
+                  <div className="cad-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
+                    <span className="cad-label">訂正後</span>
+                    <input
+                      className="manual-correction-input"
+                      value={manualCorrectionInput}
+                      onChange={e => setManualCorrectionInput(e.target.value)}
+                      onKeyDown={e => {
+                        // isComposing ガード: IME 確定 Enter での誤発火を防ぐ
+                        if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                          e.preventDefault();
+                          executeManualCorrection();
+                        }
+                        if (e.key === 'Escape') { closeManualDialog(); }
+                      }}
+                      autoFocus
+                      onFocus={e => e.target.select()}
+                      placeholder="訂正後のテキストを入力..."
+                    />
+                  </div>
+                </div>
+                <div className="cad-actions">
+                  <button className="cad-cancel" onClick={closeManualDialog}>キャンセル</button>
+                  <button className="cad-confirm" onClick={executeManualCorrection}>確定</button>
+                </div>
+              </>
+            )}
+
+            {/* ── Phase 2: 一時辞書登録プロンプト (Phase M-1) ── */}
+            {manualRegisterPrompt && (
+              <>
+                <div className="cad-header manual-register-header">
+                  <span>temporary辞書に登録しますか?</span>
+                  <span className="manual-register-badge">temporary</span>
+                </div>
+                <div className="cad-body">
+                  <div className="cad-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 4 }}>
+                    <span className="cad-label">疑義表記 → 正規化形</span>
+                    <div className="manual-register-term-row">
+                      <input
+                        className="manual-correction-input manual-register-input"
+                        value={manualRegisterForm.term}
+                        onChange={e => setManualRegisterForm(f => ({ ...f, term: e.target.value }))}
+                        placeholder="疑義表記"
+                        disabled={manualRegisterStatus === 'pending' || manualRegisterStatus === 'ok'}
+                      />
+                      <span className="manual-register-arrow">→</span>
+                      <input
+                        ref={manualRegisterNormalizedRef}
+                        className="manual-correction-input manual-register-input"
+                        value={manualRegisterForm.normalized}
+                        onChange={e => setManualRegisterForm(f => ({ ...f, normalized: e.target.value }))}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                            e.preventDefault();
+                            handleManualRegisterSubmit();
+                          }
+                          if (e.key === 'Escape') { closeManualDialog(); }
+                        }}
+                        placeholder="正規化形"
+                        disabled={manualRegisterStatus === 'pending' || manualRegisterStatus === 'ok'}
+                      />
+                    </div>
+                  </div>
+                  <div className="cad-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 4 }}>
+                    <span className="cad-label">カテゴリ（任意）</span>
+                    <input
+                      className="manual-correction-input"
+                      value={manualRegisterForm.category}
+                      onChange={e => setManualRegisterForm(f => ({ ...f, category: e.target.value }))}
+                      placeholder="例: 法制語"
+                      disabled={manualRegisterStatus === 'pending' || manualRegisterStatus === 'ok'}
+                    />
+                  </div>
+                  {manualRegisterStatus === 'ok' && (
+                    <div className="manual-register-result manual-register-result--ok">✓ 登録完了</div>
+                  )}
+                  {manualRegisterStatus === 'error' && (
+                    <div className="manual-register-result manual-register-result--error">{manualRegisterError}</div>
+                  )}
+                </div>
+                <div className="cad-actions">
+                  <button
+                    className="cad-cancel"
+                    onClick={closeManualDialog}
+                    disabled={manualRegisterStatus === 'pending'}
+                  >スキップ</button>
+                  <button
+                    className="cad-confirm"
+                    onClick={handleManualRegisterSubmit}
+                    disabled={
+                      !manualRegisterForm.term.trim() ||
+                      !manualRegisterForm.normalized.trim() ||
+                      manualRegisterStatus === 'pending' ||
+                      manualRegisterStatus === 'ok'
+                    }
+                  >
+                    {manualRegisterStatus === 'pending' ? '登録中…' : '登録する'}
+                  </button>
+                </div>
+              </>
+            )}
+
+          </div>
+        </div>
+      )}
+
       {popover && (
         <>
           <div className="overlay" onClick={() => dismissPopover('overlay')} />
@@ -2068,7 +2669,12 @@ const Proofreader = forwardRef(function Proofreader({ document, currentPage, vie
               <h4>「{popover.span.suspect_span}」の候補</h4>
               <button className="btn-icon popover-close" onClick={() => dismissPopover('close_btn')}>×</button>
             </div>
-            <div className="popover-reason">{popover.span.reason}</div>
+            <div className="popover-reason">
+              {popover.span.reason}
+              {popover.span.rank1_from_experimental_dict && (
+                <span className="tag-experimental-dict">temporary辞書</span>
+              )}
+            </div>
             <div className="candidates-list">
               {(() => {
                 const sameUncorrected = analyzedSpans.filter(sp =>
@@ -2116,32 +2722,43 @@ const Proofreader = forwardRef(function Proofreader({ document, currentPage, vie
                 onChange={(e) => setManualInput(e.target.value)}
                 placeholder="手動入力..."
               />
-              {!(popover.span.candidates || []).includes('') && (
+              <div className="manual-input-buttons">
+                {!(popover.span.candidates || []).includes('') && (
+                  <button
+                    className="delete-span-btn"
+                    onClick={() => handleCandidateSelect('', -1)}
+                    title="この箇所を削除"
+                  >削除</button>
+                )}
                 <button
-                  className="delete-span-btn"
-                  onClick={() => handleCandidateSelect('', -1)}
-                  title="この箇所を削除"
-                >削除</button>
-              )}
-              <button
-                className="save-btn"
-                disabled={!manualInput}
-                onClick={() => {
-                  if (manualInput) handleCandidateSelect(manualInput, -1);
-                }}
-              >確定</button>
-            </div>
-            {(popover.span.candidates?.length ?? 0) > 0 && !acceptedCorrections[popover.spanId] && (
-              <div className="popover-reject-section">
-                <button
-                  className="reject-top1-btn"
-                  onClick={handleRejectTop1}
-                  title={`「${popover.span.candidates[0]}」を除外（この候補は学習対象から除外）`}
-                >
-                  「{popover.span.candidates[0]}」を除外
-                </button>
+                  className="save-btn"
+                  disabled={!manualInput}
+                  onClick={() => {
+                    if (manualInput) handleCandidateSelect(manualInput, -1);
+                  }}
+                >確定</button>
               </div>
-            )}
+            </div>
+            {(() => {
+              const _cands = (popover.span.candidates ?? []).filter(c => c !== '');
+              if (_cands.length === 0 || acceptedCorrections[popover.spanId]) return null;
+              const _activeIdx = popoverCandidateIndex >= 0
+                ? Math.min(popoverCandidateIndex, _cands.length - 1)
+                : 0;
+              const _activeCandidate = _cands[_activeIdx] ?? null;
+              if (!_activeCandidate) return null;
+              return (
+                <div className="popover-reject-section">
+                  <button
+                    className="reject-top1-btn"
+                    onClick={() => handleRejectActive(_activeCandidate)}
+                    title={`「${_activeCandidate}」を除外（この候補は学習対象から除外）`}
+                  >
+                    「{_activeCandidate}」を除外
+                  </button>
+                </div>
+              );
+            })()}
           </div>
         </>
       )}

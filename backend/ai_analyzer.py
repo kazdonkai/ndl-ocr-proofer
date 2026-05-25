@@ -41,6 +41,8 @@ class AIAnalyzer:
         # 辞書の初期化と読み込み
         self.dictionary_loader = DictionaryLoader(dict_dir)
         self.dictionary_loader.load_all_approved()
+        # Phase M-1: 起動時に temporary/ も即時ロード（enabled=true のみ）
+        self.dictionary_loader.load_temporary_dir()
         print(f"[AIAnalyzer] Loaded {len(self.dictionary_loader.terms)} dictionary terms.")
 
         # Phase 1-a: 字形混同検出器
@@ -317,6 +319,7 @@ class AIAnalyzer:
         domain_hint: str = "",
         frontmatter: Optional[Dict[str, Any]] = None,
         filename: str = "",
+        document_text: Optional[str] = None,
     ) -> tuple:
         """
         ドキュメント全文からOCR本文を抽出し、疑義箇所の抽出から候補生成までを一気通貫で行うメインAPI
@@ -339,7 +342,10 @@ class AIAnalyzer:
         )
 
         # Phase 1-b: 助詞書体スタイル解析（早期計算してひらがな誤認検出に使用）
-        style_hints = self.particle_script_analyzer.analyze(clean_text)
+        # document_text が渡された場合は全ページ結合テキストで判定し、
+        # 助詞が少ない首紙・短ページでも文書全体のカタカナ優勢を正しく反映させる。
+        _style_target = document_text if document_text else clean_text
+        style_hints = self.particle_script_analyzer.analyze(_style_target)
 
         spans = []
 
@@ -420,6 +426,14 @@ class AIAnalyzer:
         results = []
         # 同一 suspect_span テキストの出現番号を追跡するカウンター（0-indexed）
         occurrence_counters: dict[str, int] = {}
+
+        # experimental tier の全表記形をセットで事前計算（観測用、is_dangerous には使わない）
+        _experimental_forms: set[str] = {
+            form
+            for t in self.dictionary_loader.terms
+            if t.tier == "experimental"
+            for form in t.all_forms
+        }
 
         for span_data in unique_spans:
             text_span = span_data["suspect_span"]
@@ -568,6 +582,7 @@ class AIAnalyzer:
                     "soft_hint_candidates": soft_hint_candidates,
                     "rank1_is_proper_noun": bool(rank1 and proper_noun_terms and rank1 in proper_noun_terms),
                     "rank1_from_shape": bool(rank1 and rank1 in _shape_cands),
+                    "rank1_from_experimental_dict": bool(rank1 and rank1 in _experimental_forms),
                 })
                 search_pos = pos + len(text_span)
             # clean_text に出現しないスパン（OCR JSON 由来の文字が正規化後に消えた場合等）は除外

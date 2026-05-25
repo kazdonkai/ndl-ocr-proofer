@@ -1184,3 +1184,121 @@ body {
   color: var(--text-dim);
   margin-top: 2px;
 }
+
+.setting-saving-indicator {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  margin-left: 4px;
+  opacity: 0.7;
+}
+
+
+/* ── 一時辞書 UI (Phase M-1) ─────────────────────────────────────── */
+.temp-dict-form {
+  padding: 6px 8px 10px;
+  background: var(--bg-dark);
+  border: 1px solid var(--border, #334155);
+  border-radius: 6px;
+  margin: 0 0 8px;
+}
+.temp-dict-form-row {
+  margin-bottom: 6px;
+}
+.temp-dict-form-label {
+  display: block;
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  margin-bottom: 2px;
+}
+
+.temp-dict-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+.temp-dict-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 5px 8px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border, #334155);
+  border-radius: 5px;
+  position: relative;
+}
+.temp-dict-item--disabled {
+  opacity: 0.45;
+}
+.temp-dict-item--stale {
+  border-color: var(--warning, #f59e0b);
+}
+.temp-dict-item-main {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.8rem;
+}
+.temp-dict-term {
+  color: var(--text-main);
+  font-weight: 600;
+}
+.temp-dict-arrow {
+  color: var(--text-dim);
+  font-size: 0.75rem;
+}
+.temp-dict-normalized {
+  color: var(--accent, #3b82f6);
+}
+.temp-dict-tag {
+  font-size: 0.65rem;
+  padding: 1px 4px;
+  border-radius: 3px;
+  margin-left: 4px;
+}
+.temp-dict-tag--stale {
+  background: rgba(245, 158, 11, 0.18);
+  color: var(--warning, #f59e0b);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+}
+.temp-dict-item-meta {
+  display: flex;
+  gap: 6px;
+  font-size: 0.68rem;
+  color: var(--text-dim);
+}
+.temp-dict-meta-text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 120px;
+}
+.btn-temp-toggle {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.68rem;
+  padding: 2px 7px;
+  border-radius: 4px;
+  border: 1px solid var(--border, #334155);
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.btn-temp-toggle.active {
+  background: rgba(59, 130, 246, 0.15);
+  color: var(--accent, #3b82f6);
+  border-color: rgba(59, 130, 246, 0.4);
+}
+.btn-temp-toggle:hover:not(:disabled) {
+  background: rgba(59, 130, 246, 0.25);
+  color: var(--text-main);
+}
+.btn-temp-toggle:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}

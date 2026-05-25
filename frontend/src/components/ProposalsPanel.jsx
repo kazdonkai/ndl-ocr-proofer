@@ -21,11 +21,15 @@ function VerdictBadge({ verdict }) {
   );
 }
 
-export default function ProposalsPanel({ analyzedSpans, currentPageData, open, onToggle, onSpanClick, headless, hiraAllCount, onHiraAllNorm, acceptedCorrections }) {
+export default function ProposalsPanel({ analyzedSpans, currentPageData, open, onToggle, onSpanClick, headless, hiraAllCount, onHiraAllNorm, acceptedCorrections, rejectedSpanIds }) {
   const [expandedId, setExpandedId] = useState(null);
 
   const items = analyzedSpans
-    .filter(sp => sp.validation != null && (acceptedCorrections?.[sp.id] === undefined))
+    .filter(sp =>
+      sp.validation != null &&
+      acceptedCorrections?.[sp.id] === undefined &&
+      !rejectedSpanIds?.has(sp.id)
+    )
     .sort((a, b) => {
       const order = { reject: 0, review: 1, accept: 2 };
       return (order[a.validation.verdict] ?? 1) - (order[b.validation.verdict] ?? 1);
