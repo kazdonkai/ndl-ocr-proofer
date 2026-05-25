@@ -55,7 +55,7 @@ class CorrectionEntry(BaseModel):
 
 
 class RunOcrRequest(BaseModel):
-    status_property_name: str = "minji_status"
+    status_property_name: str = "analyzed_status"
 
 
 class OcrSettings(BaseModel):
@@ -113,6 +113,7 @@ class AnalyzeRequest(BaseModel):
     ocr_json: dict | None = None
     frontmatter: dict | None = None
     filename: str = ""           # Phase 1-c: file context for domain hint
+    document_text: str | None = None  # 全ページ結合テキスト（助詞スタイル判定をページ横断で行うために使用）
 
 
 class OcrNormalizationSuggestion(BaseModel):
@@ -155,6 +156,9 @@ class AnalyzedSpan(BaseModel):
     # True when the rank-1 candidate originates from shape_pairs lookup.
     # Shape-pairs corrections are considered safe and excluded from the danger flag.
     rank1_from_shape: bool = False
+    # True when the rank-1 candidate originates from the experimental (staging/) dictionary tier.
+    # Observation-only field — not used in is_dangerous calculation.
+    rank1_from_experimental_dict: bool = False
 
     @computed_field
     @property
@@ -186,3 +190,49 @@ class AnalyzeResponse(BaseModel):
     doc_type_source: str = "heuristic"         # "frontmatter" | "heuristic" | "insufficient_text"
     particle_normalization_count: int = 0       # に/を/は → ニ/ヲ/ハ 候補件数（current page）
     document_style_hints: DocumentStyleHints | None = None  # Phase 1-b
+
+
+# ── temporary辞書 API モデル（Phase M-1） ─────────────────────────────────────
+
+class TemporaryDictEntry(BaseModel):
+    """GET /api/dictionary/temporary のレスポンス要素。CSV 1行に対応。"""
+    term: str
+    normalized: str
+    variants: str = ""
+    reading: str = ""
+    category: str = ""
+    domain: str = ""
+    priority: float = 0.6
+    protect: bool = False
+    source: str = "user-manual"   # "user-manual" | "seed"
+    approved: bool = False
+    enabled: bool = True
+    registered_at: str = ""
+    last_seen_at: str = ""
+    note: str = ""
+    is_stale: bool = False        # last_seen_at が 180 日以上前かどうか（参照用）
+
+
+class RegisterTemporaryTermRequest(BaseModel):
+    """POST /api/dictionary/temporary のリクエスト。"""
+    term: str
+    normalized: str
+    variants: str = ""
+    reading: str = ""
+    category: str = ""
+    domain: str = ""
+    priority: float = 0.6
+    note: str = ""
+    # source は API 経由登録では常に "user-manual"（seed は直接 CSV 編集）
+
+
+class ToggleTemporaryTermRequest(BaseModel):
+    """PATCH /api/dictionary/temporary/{term} のリクエスト。"""
+    enabled: bool
+
+
+class TemporaryDictListResponse(BaseModel):
+    """GET /api/dictionary/temporary のレスポンス。"""
+    terms: list[TemporaryDictEntry]
+    total: int
+    enabled_count: int

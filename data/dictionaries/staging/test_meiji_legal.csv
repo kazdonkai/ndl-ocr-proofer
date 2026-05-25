@@ -1,0 +1,6 @@
+term,normalized,variants,reading,category,domain,priority,protect,source,approved
+酒治,済治,,さいじ,人名,明治法制実験,0.65,false,auto-ocr-experimental,false
+催足,催促,,さいそく,法制語,明治法制実験,0.70,false,auto-ocr-experimental,false
+控告,控訴,,こうそ,法制語,明治法制実験,0.65,false,auto-ocr-experimental,false
+山奈,山梨,,やまなし,地名,明治法制実験,0.75,false,auto-ocr-experimental,false
+裁判人,裁判官,,さいばんかん,法制語,明治法制実験,0.60,false,auto-ocr-experimental,false

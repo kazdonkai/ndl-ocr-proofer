@@ -105,6 +105,90 @@ class DictionaryLoader:
             raise FileNotFoundError(f"Staging file not found: {filename}")
         return self.load_csv(target_path, tier="experimental")
 
+    def load_all_staging(self) -> None:
+        """stagingディレクトリ配下のすべてのCSVを experimental tier で self.terms に追記する。
+        既存の stable terms は変更しない。staging/ が存在しないか空の場合は何もしない。"""
+        if not self.staging_dir.exists():
+            return
+        added = 0
+        for csv_path in self.staging_dir.glob("*.csv"):
+            terms = self.load_csv(csv_path, tier="experimental")
+            self.terms.extend(terms)
+            added += len(terms)
+        if added:
+            print(f"[DictionaryLoader] Loaded {added} experimental terms from staging/.")
+
+    def load_temporary_csv(self, file_path: Path) -> List[DictionaryTerm]:
+        """temporary CSV を読み込む。
+
+        - enabled=true のエントリのみロードする（M-1 loader フィルタ）。
+        - tier="temporary" を付与して stable / experimental と区別する。
+        - source フィールドで "user-manual" / "seed" の provenance を保持する。
+        - 既存の load_csv() とは独立したメソッドで、観測フィールド A〜I に影響しない。
+        """
+        loaded_terms: List[DictionaryTerm] = []
+        _TRUE = {"true", "1", "t", "yes", "y"}
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    # enabled フィルタ（M-1 コア要件）
+                    enabled_raw = row.get("enabled", "false").strip().lower()
+                    if enabled_raw not in _TRUE:
+                        continue
+
+                    term = row.get("term", "").strip()
+                    if not term:
+                        continue
+
+                    variants_raw = row.get("variants", "")
+                    variants = [v.strip() for v in variants_raw.split(";") if v.strip()]
+
+                    term_obj = DictionaryTerm(
+                        term=term,
+                        normalized=row.get("normalized", "").strip(),
+                        variants=variants,
+                        reading=row.get("reading", "").strip(),
+                        category=row.get("category", "").strip(),
+                        domain=row.get("domain", "").strip(),
+                        priority=self._parse_float(row.get("priority", "0.6")),
+                        protect=self._parse_bool(row.get("protect", "false")),
+                        source=row.get("source", "user-manual").strip(),
+                        approved=self._parse_bool(row.get("approved", "false")),
+                        tier="temporary",  # stable / experimental と区別
+                    )
+                    loaded_terms.append(term_obj)
+        except UnicodeDecodeError:
+            raise ValueError(f"ファイル '{file_path.name}' はUTF-8形式で保存してください。")
+        return loaded_terms
+
+    def load_temporary_dir(self) -> None:
+        """temporary/ ディレクトリの CSV を一括ロードする（enabled=true のみ）。
+
+        - reload() から常に呼ばれる（use_experimental フラグに依存しない）。
+        - tier="temporary" で分類されるため rank1_from_experimental_dict（観測 A〜I）に影響しない。
+        """
+        temp_dir = self.dict_dir / "temporary"
+        if not temp_dir.exists():
+            return
+        added = 0
+        for csv_path in temp_dir.glob("*.csv"):
+            terms = self.load_temporary_csv(csv_path)
+            self.terms.extend(terms)
+            added += len(terms)
+        if added:
+            print(f"[DictionaryLoader] Loaded {added} temporary terms from temporary/ (enabled only).")
+
+    def reload(self, use_experimental: bool = False) -> None:
+        """辞書全体を再読み込みする。use_experimental=True のとき staging/ も追加ロードする。
+        temporary/ は use_experimental フラグに関わらず常にロードする。
+        """
+        self.load_all_approved()
+        if use_experimental:
+            self.load_all_staging()
+        self.load_temporary_dir()
+        print(f"[DictionaryLoader] Reload complete: {len(self.terms)} terms (experimental={use_experimental}).")
+
     def search_by_domain(self, domain: str) -> List[DictionaryTerm]:
         """特定の分野(domain)に合致する語彙リストを返すAPI"""
         return [t for t in self.terms if t.domain == domain]

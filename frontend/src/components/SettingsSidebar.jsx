@@ -16,10 +16,46 @@ export default function SettingsSidebar({
   isRescanning, rescanNotice, onVaultRescan,
   onExportCsv, onExportJson,
   onFlushEvents,
+  ocrSettings, onOcrSettingChange,
+  dictionarySettings, onDictionarySettingChange, isSavingDictionary,
+  temporaryTerms = [], isLoadingTempDict = false, tempDictError = null,
+  onRegisterTemporaryTerm, onToggleTemporaryTerm,
   onClose,
 }) {
   const [flushStatus, setFlushStatus] = useState(null); // null | 'pending' | 'ok' | 'error'
   const [flushedCount, setFlushedCount] = useState(null);
+
+  // ── 一時辞書 登録フォーム state ──────────────────────────────────────────
+  const [tempFormTerm, setTempFormTerm] = useState('');
+  const [tempFormNormalized, setTempFormNormalized] = useState('');
+  const [tempFormCategory, setTempFormCategory] = useState('');
+  const [tempFormNote, setTempFormNote] = useState('');
+  const [tempRegisterStatus, setTempRegisterStatus] = useState(null); // null|'pending'|'ok'|'error'
+  const [tempRegisterError, setTempRegisterError] = useState('');
+  const [tempShowForm, setTempShowForm] = useState(false);
+
+  const handleTempRegister = async () => {
+    if (!tempFormTerm.trim() || !tempFormNormalized.trim()) return;
+    setTempRegisterStatus('pending');
+    setTempRegisterError('');
+    try {
+      await onRegisterTemporaryTerm?.({
+        term: tempFormTerm.trim(),
+        normalized: tempFormNormalized.trim(),
+        category: tempFormCategory.trim(),
+        note: tempFormNote.trim(),
+      });
+      setTempRegisterStatus('ok');
+      setTempFormTerm('');
+      setTempFormNormalized('');
+      setTempFormCategory('');
+      setTempFormNote('');
+      setTimeout(() => setTempRegisterStatus(null), 2000);
+    } catch (err) {
+      setTempRegisterStatus('error');
+      setTempRegisterError(err.message ?? '登録失敗');
+    }
+  };
 
   const handleFlush = async () => {
     setFlushStatus('pending');
@@ -154,6 +190,159 @@ export default function SettingsSidebar({
         />
       </div>
 
+      <div className="settings-section-label">OCR</div>
+
+      <div className="setting-item">
+        <label className="setting-check-label">
+          <input
+            type="checkbox"
+            checked={ocrSettings?.rename_images_before_ocr ?? true}
+            onChange={e => onOcrSettingChange?.('rename_images_before_ocr', e.target.checked)}
+          />
+          OCR前に画像をリネーム
+        </label>
+        <span className="setting-hint">ノート名＋連番形式にリネームしてから OCR を実行します</span>
+      </div>
+
+      <div className="setting-item">
+        <label className="setting-check-label">
+          <input
+            type="checkbox"
+            checked={ocrSettings?.write_status_after_ocr ?? true}
+            onChange={e => onOcrSettingChange?.('write_status_after_ocr', e.target.checked)}
+          />
+          OCR完了後にステータスを書き込む
+        </label>
+        <span className="setting-hint">フロントマターの {settings.document.statusPropertyName} に値 2 を書き込みます</span>
+      </div>
+
+      <div className="settings-section-label">辞書</div>
+
+      <div className="setting-item">
+        <label className="setting-check-label">
+          <input
+            type="checkbox"
+            checked={dictionarySettings?.use_experimental ?? false}
+            disabled={isSavingDictionary}
+            onChange={e => onDictionarySettingChange?.('use_experimental', e.target.checked)}
+          />
+          temporary辞書を使用 (staging/)
+          {isSavingDictionary && <span className="setting-saving-indicator"> 保存中…</span>}
+        </label>
+        <span className="setting-hint">staging/ ディレクトリのtemporary辞書も読み込みます。候補スコアに ×0.8 の減衰が適用されます</span>
+      </div>
+
+      {/* ── 一時辞書管理 (Phase M-1) ── */}
+      <div className="settings-section-label" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span>temporary辞書</span>
+        <span style={{ fontSize: '0.7rem', fontWeight: 'normal', color: 'var(--text-muted, #6b7280)' }}>
+          {temporaryTerms.filter(t => t.enabled).length}/{temporaryTerms.length} 有効
+        </span>
+      </div>
+
+      {/* 登録フォーム トグル */}
+      <div className="setting-item">
+        <button
+          className="btn"
+          style={{ width: '100%', fontSize: '0.8rem', padding: '5px 0' }}
+          onClick={() => setTempShowForm(v => !v)}
+        >
+          {tempShowForm ? '▲ temporary辞書登録を閉じる' : 'temporary辞書登録'}
+        </button>
+      </div>
+
+      {tempShowForm && (
+        <div className="temp-dict-form">
+          <div className="temp-dict-form-row">
+            <label className="temp-dict-form-label">疑義表記 *</label>
+            <input
+              className="setting-text-input"
+              type="text"
+              value={tempFormTerm}
+              onChange={e => setTempFormTerm(e.target.value)}
+              placeholder="例: 申渡"
+            />
+          </div>
+          <div className="temp-dict-form-row">
+            <label className="temp-dict-form-label">正規化形 *</label>
+            <input
+              className="setting-text-input"
+              type="text"
+              value={tempFormNormalized}
+              onChange={e => setTempFormNormalized(e.target.value)}
+              placeholder="例: 申し渡し"
+            />
+          </div>
+          <div className="temp-dict-form-row">
+            <label className="temp-dict-form-label">カテゴリ</label>
+            <input
+              className="setting-text-input"
+              type="text"
+              value={tempFormCategory}
+              onChange={e => setTempFormCategory(e.target.value)}
+              placeholder="例: 法制語"
+            />
+          </div>
+          <div className="temp-dict-form-row">
+            <label className="temp-dict-form-label">メモ</label>
+            <input
+              className="setting-text-input"
+              type="text"
+              value={tempFormNote}
+              onChange={e => setTempFormNote(e.target.value)}
+              placeholder="任意"
+            />
+          </div>
+          <button
+            className="btn"
+            style={{ width: '100%', marginTop: '6px', fontSize: '0.8rem', padding: '5px 0' }}
+            disabled={!tempFormTerm.trim() || !tempFormNormalized.trim() || tempRegisterStatus === 'pending'}
+            onClick={handleTempRegister}
+          >
+            {tempRegisterStatus === 'pending' ? '登録中…' : '登録'}
+          </button>
+          {tempRegisterStatus === 'ok' && (
+            <div style={{ marginTop: '4px', fontSize: '0.75rem', color: '#34d399' }}>登録完了</div>
+          )}
+          {tempRegisterStatus === 'error' && (
+            <div style={{ marginTop: '4px', fontSize: '0.75rem', color: '#f87171' }}>{tempRegisterError}</div>
+          )}
+        </div>
+      )}
+
+      {/* 登録済み一覧 */}
+      {temporaryTerms.length === 0 ? (
+        <div className="setting-hint" style={{ paddingLeft: '8px' }}>登録済みの語はありません</div>
+      ) : (
+        <div className="temp-dict-list">
+          {temporaryTerms.map(entry => (
+            <div key={entry.term} className={`temp-dict-item${entry.enabled ? '' : ' temp-dict-item--disabled'}${entry.is_stale ? ' temp-dict-item--stale' : ''}`}>
+              <div className="temp-dict-item-main">
+                <span className="temp-dict-term">{entry.term}</span>
+                <span className="temp-dict-arrow">→</span>
+                <span className="temp-dict-normalized">{entry.normalized}</span>
+                {entry.is_stale && <span className="temp-dict-tag temp-dict-tag--stale">未使用</span>}
+              </div>
+              <div className="temp-dict-item-meta">
+                {entry.category && <span className="temp-dict-meta-text">{entry.category}</span>}
+                {entry.note && <span className="temp-dict-meta-text">{entry.note}</span>}
+              </div>
+              <button
+                className={`btn-temp-toggle${entry.enabled ? ' active' : ''}`}
+                disabled={isLoadingTempDict}
+                onClick={() => onToggleTemporaryTerm?.(entry.term, !entry.enabled)}
+                title={entry.enabled ? '無効化' : '有効化'}
+              >
+                {entry.enabled ? '有効' : '無効'}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      {tempDictError && (
+        <div className="setting-hint" style={{ color: '#f87171', paddingLeft: '8px' }}>{tempDictError}</div>
+      )}
+
       <div className="settings-section-label">インポート</div>
 
       <div className="setting-item">
@@ -200,6 +389,16 @@ export default function SettingsSidebar({
           onChange={e => updateSetting('document', 'completionStatusValue', parseInt(e.target.value, 10))}
         />
         <span className="setting-hint">Value written to the status property when marking Complete</span>
+      </div>
+
+      <div className="setting-item">
+        <label>全ページカタカナ優勢判定閾値: {Math.round((settings.document.bulkKatakanaThreshold ?? 0.85) * 100)}%</label>
+        <input
+          type="range" min="0.85" max="1.00" step="0.05"
+          value={settings.document.bulkKatakanaThreshold ?? 0.85}
+          onChange={e => updateSetting('document', 'bulkKatakanaThreshold', Math.max(0.85, parseFloat(e.target.value)))}
+        />
+        <span className="setting-hint">この比率以上のカタカナ優勢ファイルでのみ「全ページ カタカナ化」ボタンが表示されます（最低値 85% 固定）</span>
       </div>
 
       <div className="settings-section-label">データ</div>

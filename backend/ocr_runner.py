@@ -6,6 +6,10 @@ import uuid
 import unicodedata
 from pathlib import Path
 from dotenv import load_dotenv
+try:
+    import yaml as _yaml
+except ImportError:
+    _yaml = None
 
 load_dotenv(Path(__file__).parent / ".env")
 
@@ -14,6 +18,36 @@ OCR_ENGINE_PATH = Path(os.environ["OCR_ENGINE_PATH"])
 TEMP_ROOT = Path(os.getenv("OCR_TEMP_ROOT", "/tmp/ocr_temp"))
 TEMP_IMAGE_DIR = TEMP_ROOT / "images"
 TEMP_OCR_DIR = TEMP_ROOT / "ocr_raw"
+
+def _load_ocr_bool(key: str, default: bool = True) -> bool:
+    """settings.yaml の ocr.{key} を読み込む。設定なし・読み込み失敗時は default。"""
+    if _yaml is None:
+        return default
+    settings_path = VAULT_ROOT / ".agent" / "settings.yaml"
+    if not settings_path.exists():
+        return default
+    try:
+        with open(settings_path, "r", encoding="utf-8") as f:
+            data = _yaml.safe_load(f) or {}
+        return bool(data.get("ocr", {}).get(key, default))
+    except Exception:
+        return default
+
+
+def _load_status_value() -> int:
+    """settings.yaml の status.OCR完了値 を読み込む。設定なし・読み込み失敗時は 2。"""
+    if _yaml is None:
+        return 2
+    settings_path = VAULT_ROOT / ".agent" / "settings.yaml"
+    if not settings_path.exists():
+        return 2
+    try:
+        with open(settings_path, "r", encoding="utf-8") as f:
+            data = _yaml.safe_load(f) or {}
+        return int(data.get("status", {}).get("OCR完了値", 2))
+    except Exception:
+        return 2
+
 
 def ocr_image(image_path: Path) -> str:
     """NDL古典籍OCRを実行し、テキストを返す"""
@@ -58,7 +92,7 @@ def ocr_single_page(image_path: Path) -> str:
     return ocr_image(image_path)
 
 
-def process_and_run_ocr(md_path_str: str) -> bool:
+def process_and_run_ocr(md_path_str: str, status_property_name: str = "analyzed_status") -> bool:
     md_path = Path(md_path_str)
     if not md_path.exists():
         return False
@@ -80,7 +114,6 @@ def process_and_run_ocr(md_path_str: str) -> bool:
     note_parent = md_path.parent
     root_files = VAULT_ROOT / "files"
     target_files_dir = note_parent / "files"
-    target_files_dir.mkdir(exist_ok=True)
 
     images_to_process = []
     for link in img_links:
@@ -125,28 +158,34 @@ def process_and_run_ocr(md_path_str: str) -> bool:
 
     # 3. リネーム・移動・OCR実行
     note_stem = unicodedata.normalize('NFC', md_path.stem)
+    do_rename = _load_ocr_bool("rename_images_before_ocr")
+    if do_rename:
+        target_files_dir.mkdir(exist_ok=True)
     new_image_sections = []
-    
+
     for i, src in enumerate(unique_images):
         seq = i + 1
-        new_name = f"{note_stem}_{seq:02d}{src.suffix.lower()}"
-        dest = target_files_dir / new_name
-        
-        # リネームして移動
-        if str(src) != str(dest):
-            if not dest.exists():
+        if do_rename:
+            new_name = f"{note_stem}_{seq:02d}{src.suffix.lower()}"
+            dest = target_files_dir / new_name
+            if str(src) != str(dest) and not dest.exists():
                 shutil.move(str(src), str(dest))
-        
+            img_link = f"files/{new_name}"
+        else:
+            new_name = src.name
+            dest = src
+            img_link = new_name
+
         # OCR実行
         ocr_text = ocr_image(dest)
-        
+
         # コールアウト形式のブロック作成
-        block = f"- [ ] ![[files/{new_name}]]"
+        block = f"- [ ] ![[{img_link}]]"
         if ocr_text:
             block += "\n> [!ocr]"
             for t_line in ocr_text.split("\n"):
                 block += f"\n> {t_line}"
-        
+
         new_image_sections.append(block)
 
     # 4. コンテンツの整形
@@ -189,18 +228,21 @@ def process_and_run_ocr(md_path_str: str) -> bool:
     else:
         final_content = "\n".join(cleaned_lines) + "\n\n## 記録" + images_str
 
-    # フロントマターの status または minji_status を 3 に更新
-    fm_match = re.match(r"^---\n(.*?)\n---", final_content, re.DOTALL)
-    if fm_match:
-        fm_content = fm_match.group(1)
-        if re.search(r"^minji_status:", fm_content, re.MULTILINE):
-            fm_content = re.sub(r"^minji_status:.*$", "minji_status: 3", fm_content, flags=re.MULTILINE)
-        elif re.search(r"^status:", fm_content, re.MULTILINE):
-            fm_content = re.sub(r"^status:.*$", "status: 3", fm_content, flags=re.MULTILINE)
+    # フロントマターのステータスを更新（write_status_after_ocr が true の場合のみ）
+    if _load_ocr_bool("write_status_after_ocr"):
+        ocr_done_value = _load_status_value()
+        fm_match = re.match(r"^---\n(.*?)\n---", final_content, re.DOTALL)
+        if fm_match:
+            fm_content = fm_match.group(1)
+            prop = re.escape(status_property_name)
+            if re.search(rf"^{prop}:", fm_content, re.MULTILINE):
+                fm_content = re.sub(rf"^{prop}:.*$", f"{status_property_name}: {ocr_done_value}", fm_content, flags=re.MULTILINE)
+            else:
+                fm_content += f"\n{status_property_name}: {ocr_done_value}"
+            final_content = f"---\n{fm_content}\n---" + final_content[fm_match.end():]
         else:
-            fm_content += "\nstatus: 3"
-            
-        final_content = f"---\n{fm_content}\n---" + final_content[fm_match.end():]
+            # フロントマターが存在しない場合は新規作成
+            final_content = f"---\n{status_property_name}: {ocr_done_value}\n---\n{final_content}"
 
     # 5. 保存
     with open(md_path, "w", encoding="utf-8") as f:

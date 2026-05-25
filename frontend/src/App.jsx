@@ -11,7 +11,8 @@ import { usePageView } from './state/usePageView';
 import { useVaultFiles } from './state/useVaultFiles';
 import { useDocumentOpen } from './state/useDocumentOpen';
 
-import { saveDocumentPage, runOcrForDocument as apiRunOcrForDocument, runOcrForPage as apiRunOcrForPage, updateDocumentStatus } from './services/documentService';
+import { saveDocumentPage, runOcrForDocument as apiRunOcrForDocument, runOcrForPage as apiRunOcrForPage, updateDocumentStatus, getOcrSettings, updateOcrSettings, getDictionarySettings, updateDictionarySettings, getTemporaryTerms, registerTemporaryTerm, toggleTemporaryTerm } from './services/documentService';
+import { logDictionarySettingChanged } from './services/learningEventLogger';
 import {
   normalizeCorrections,
   buildExportRows,
@@ -30,6 +31,91 @@ function App() {
   const { keybindings, capturingKey, setCapturingKey, resetKeybindings } = useKeybindings();
   const { splitRatio, isDragging, workspaceRef, handleMouseDown } = useSplitPane();
   const vaultFiles = useVaultFiles();
+
+  // ─── OCR settings (.agent/settings.yaml, read/written via backend API) ───
+  const [ocrSettings, setOcrSettings] = useState({ rename_images_before_ocr: true });
+  useEffect(() => {
+    getOcrSettings().then(s => setOcrSettings(s)).catch(() => {});
+  }, []);
+  const handleOcrSettingChange = async (key, value) => {
+    const updated = { ...ocrSettings, [key]: value };
+    setOcrSettings(updated);
+    try {
+      await updateOcrSettings(updated);
+    } catch (err) {
+      console.error('OCR設定の保存に失敗:', err);
+    }
+  };
+
+  // ─── Dictionary settings (.agent/settings.yaml, read/written via backend API) ───
+  const [dictionarySettings, setDictionarySettings] = useState({ use_experimental: false });
+  const [isSavingDictionary, setIsSavingDictionary] = useState(false);
+  useEffect(() => {
+    getDictionarySettings().then(s => setDictionarySettings(s)).catch(() => {});
+  }, []);
+  const handleDictionarySettingChange = async (key, value) => {
+    if (isSavingDictionary) return;
+    const prevSettings = { ...dictionarySettings };
+    const updated = { ...dictionarySettings, [key]: value };
+    setDictionarySettings(updated);
+    setIsSavingDictionary(true);
+    try {
+      await updateDictionarySettings(updated);
+      logDictionarySettingChanged({ key, old_value: prevSettings[key], new_value: value, reload_result: 'success' });
+    } catch (err) {
+      console.error('辞書設定の保存に失敗:', err);
+      logDictionarySettingChanged({ key, old_value: prevSettings[key], new_value: value, reload_result: 'error' });
+      // re-fetch server state to ensure UI matches actual setting
+      try {
+        const serverSettings = await getDictionarySettings();
+        setDictionarySettings(serverSettings);
+      } catch {
+        setDictionarySettings(prevSettings);
+      }
+    } finally {
+      setIsSavingDictionary(false);
+    }
+  };
+
+  // ─── temporary辞書 state (Phase M-1) ────────────────────────────────────
+  const [temporaryTerms, setTemporaryTerms] = useState([]);
+  const [isLoadingTempDict, setIsLoadingTempDict] = useState(false);
+  const [tempDictError, setTempDictError] = useState(null);
+
+  useEffect(() => {
+    getTemporaryTerms()
+      .then(data => setTemporaryTerms(data.terms ?? []))
+      .catch(() => {});
+  }, []);
+
+  const handleRegisterTemporaryTerm = async (termData) => {
+    setIsLoadingTempDict(true);
+    setTempDictError(null);
+    try {
+      await registerTemporaryTerm(termData);
+      const data = await getTemporaryTerms();
+      setTemporaryTerms(data.terms ?? []);
+    } catch (err) {
+      setTempDictError(err.message);
+      throw err; // SettingsSidebar 側でも受け取れるよう再スロー
+    } finally {
+      setIsLoadingTempDict(false);
+    }
+  };
+
+  const handleToggleTemporaryTerm = async (term, enabled) => {
+    setIsLoadingTempDict(true);
+    setTempDictError(null);
+    try {
+      await toggleTemporaryTerm(term, enabled);
+      const data = await getTemporaryTerms();
+      setTemporaryTerms(data.terms ?? []);
+    } catch (err) {
+      setTempDictError(err.message);
+    } finally {
+      setIsLoadingTempDict(false);
+    }
+  };
 
   // ─── Circular-dep bridge ─────────────────────────────────────────────────
   // useDocumentOpen needs setCurrentPage (from usePageView), but usePageView
@@ -342,12 +428,13 @@ function App() {
 
     const pages = documentData.ocr_pages || [];
     const hasIndexedImages = pages.some(p => p.image_name);
+    const hasAnyOcrText = pages.some(p => p.ocr_text?.trim());
 
-    if (!hasIndexedImages) {
-      // 初回文書: 既存の一括OCRにフォールバック
+    if (!hasIndexedImages || !hasAnyOcrText) {
+      // 初回文書またはOCR未実行: 一括OCR（リネーム含む）にフォールバック
       setOcrBulkState({ isRunning: true, isComplete: false, done: 0, total: 0, failed: [], isInitialFallback: true });
       try {
-        await apiRunOcrForDocument(id);
+        await apiRunOcrForDocument(id, { statusPropertyName: settings.document.statusPropertyName });
         await reloadDocument();
       } catch (err) {
         console.error('Bulk OCR (initial fallback) failed:', err);
@@ -681,6 +768,16 @@ function App() {
             onExportCsv={() => { handleExportCsv(); setShowSettings(false); }}
             onExportJson={() => { handleExportJson(); setShowSettings(false); }}
             onFlushEvents={flushToBackend}
+            ocrSettings={ocrSettings}
+            onOcrSettingChange={handleOcrSettingChange}
+            dictionarySettings={dictionarySettings}
+            onDictionarySettingChange={handleDictionarySettingChange}
+            isSavingDictionary={isSavingDictionary}
+            temporaryTerms={temporaryTerms}
+            isLoadingTempDict={isLoadingTempDict}
+            tempDictError={tempDictError}
+            onRegisterTemporaryTerm={handleRegisterTemporaryTerm}
+            onToggleTemporaryTerm={handleToggleTemporaryTerm}
             onClose={() => setShowSettings(false)}
           />
         )}
@@ -863,6 +960,8 @@ function App() {
                   keybindings={keybindings}
                   onNextPage={handleNextPage}
                   onPrevPage={handlePrevPage}
+                  bulkKatakanaThreshold={settings.document.bulkKatakanaThreshold ?? 0.85}
+                  onRegisterTemporaryTerm={handleRegisterTemporaryTerm}
                 />
               </div>
             </div>
