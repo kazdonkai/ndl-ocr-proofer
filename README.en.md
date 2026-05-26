@@ -4,15 +4,42 @@
 
 NDL OCR Proofer is a proofreading assistant for researchers who need to review, correct, and record OCR text generated from Japanese vertical historical materials, including outputs from NDL Koten OCR.
 
+The application is designed to run outside the Obsidian Vault as a standalone web application. The Obsidian Vault is treated as the target workspace for research notes, input images, and OCR-bearing Markdown files. The application code, dictionaries, settings, evaluation logs, temporary files, and cache files should normally be kept outside the Vault.
+
 OCR output from historical sources such as manuscripts, classical books, early modern documents, and vertically written research materials cannot usually be used as research-ready text without careful review. Character misrecognition, place names, personal names, historical terminology, old character forms, and vertical writing conventions all require comparison with the original images.
 
-This application reads Markdown notes inside an Obsidian Vault and provides a browser-based interface for checking OCR text, page images, and correction candidates. It combines research vocabulary dictionaries, character-shape confusion rules, proper noun hints, and particle-script detection to highlight suspicious spans and record decisions such as accepting a candidate, entering a manual correction, skipping, or rejecting a suggestion.
+This application reads Markdown notes from a configured Obsidian Vault and provides a browser-based interface for checking OCR text, page images, and correction candidates. It combines research vocabulary dictionaries, character-shape confusion rules, proper noun hints, and particle-script detection to highlight suspicious spans and record decisions such as accepting a candidate, entering a manual correction, skipping, or rejecting a suggestion.
 
 NDL OCR Proofer is not intended to simply make OCR text look cleaner. It is a working environment for comparing source images with OCR text, accumulating proofreading decisions, and turning OCR output into research-usable textual data.
 
+## Important: Running Outside the Vault
+
+Earlier development versions placed the application directory inside the Obsidian Vault. The current release-oriented workflow separates the application from the Vault for easier public distribution, cleaner maintenance, and reduced Obsidian Sync storage usage.
+
+The recommended layout is:
+
+```text
+~/dev/proofreading-app/              # Application repository outside the Vault
+├── backend/
+├── frontend/
+├── data/dictionaries/               # Dictionaries outside the Vault
+├── evaluation/logs/                 # Evaluation logs outside the Vault
+└── cache/ or tmp/                   # Temporary OCR/image output
+
+/path/to/Obsidian/Vault/             # Research data selected by the app
+├── notes/
+├── images/
+└── Markdown notes containing OCR results
+```
+
+The Vault should contain research notes, source images, and Markdown OCR results when needed. The application repository, development files, dictionaries, evaluation logs, temporary images, caches, and settings should normally live outside the Vault.
+
+This separation prevents unnecessary development files, logs, and cache files from being synced through Obsidian Sync. It also makes it easier to publish and update the application repository without mixing it with private research data.
+
 ## Features
 
-- Read and save Markdown files directly inside an Obsidian Vault
+- Standalone web application that runs outside the Vault
+- Read and save Markdown files inside a configured Obsidian Vault
 - Review page images and OCR text side by side
 - Run OCR through NDL Koten OCR / ndlkotenocr-lite
 - Highlight suspicious spans using research vocabulary dictionaries
@@ -28,16 +55,18 @@ NDL OCR Proofer is not intended to simply make OCR text look cleaner. It is a wo
 - Scholars in Japanese history, classical Japanese literature, textual studies, and digital humanities
 - Obsidian users who manage research notes and transcriptions in Markdown
 - Users who need to verify OCR results manually and preserve a record of editorial decisions
+- Users who want to connect image sources with notes, transcriptions, and proofreading decisions
 
 ## Architecture
 
 ```text
-ndl-ocr-proofer/
+proofreading-app/
 ├── backend/          # FastAPI backend: Vault I/O, OCR execution, analysis
 ├── frontend/         # React + Vite frontend: proofreading UI
 ├── obsidian-plugin/  # Obsidian plugin prototype / future integration
 ├── data/             # dictionaries and rule files
-└── evaluation/       # logs and evaluation scripts
+├── evaluation/       # logs and evaluation scripts
+└── cache/ or tmp/    # recommended location for temporary OCR/image output
 ```
 
 The main user interface is currently a standalone web application that runs in the browser. The Obsidian plugin directory is included for future integration, but the current recommended workflow is to use the standalone frontend.
@@ -77,9 +106,9 @@ The main components are:
 
 ## Preparing an Obsidian Vault
 
-This application works with Markdown files inside an Obsidian Vault.
+This application works with Markdown files inside a configured Obsidian Vault. The application itself does not need to be placed inside the Vault.
 
-If you do not already use Obsidian, install Obsidian first and create a Vault in any location. The Vault acts as the working directory for research notes, OCR results, and image reference information.
+If you do not already use Obsidian, install Obsidian first and create a Vault in any location. The Vault acts as the workspace for research notes, source images, and OCR-bearing Markdown files.
 
 Set the root directory of your Obsidian Vault in `VAULT_ROOT` inside `.env`.
 
@@ -99,13 +128,35 @@ OCR_ENGINE_PATH=/path/to/ndlkotenocr-lite
 
 If you only want to proofread existing OCR text and do not need to run OCR, you can leave `OCR_ENGINE_PATH` unset. In that case, only OCR execution will be disabled.
 
+## Recommended Configuration
+
+When running outside the Vault, explicitly configure dictionaries, evaluation logs, and temporary files to stay outside the Vault.
+
+```env
+VAULT_ROOT=/path/to/your/obsidian/vault
+OCR_ENGINE_PATH=/path/to/ndlkotenocr-lite
+OCR_TEMP_ROOT=/path/to/proofreading-app/cache/ocr_temp
+DICT_DIR=/path/to/proofreading-app/data/dictionaries
+EVALUATION_DIR=/path/to/proofreading-app/evaluation/logs
+BACKEND_HOST=127.0.0.1
+BACKEND_PORT=8000
+```
+
+`OCR_TEMP_ROOT` is the location for temporary OCR images and intermediate files. To avoid unnecessary Obsidian Sync storage usage, point it to the application cache directory or an OS-level temporary directory, not to the Vault.
+
+`EVALUATION_DIR` should also normally live outside the Vault. Evaluation logs may contain research text, local paths, or unpublished transcription work, so keep them out of Obsidian Sync and public GitHub repositories unless you intentionally sanitize and publish them.
+
 ## Quick Start
 
 ### Clone the Repository
 
+Clone the repository outside the Vault.
+
 ```bash
-git clone https://github.com/kazdonkai/ndl-ocr-proofer.git
-cd ndl-ocr-proofer
+mkdir -p ~/dev
+cd ~/dev
+git clone https://github.com/kazdonkai/ndl-ocr-proofer.git proofreading-app
+cd proofreading-app
 ```
 
 ### Create Backend Configuration
@@ -120,7 +171,9 @@ Edit `.env` for your local environment.
 ```env
 VAULT_ROOT=/path/to/your/obsidian/vault
 OCR_ENGINE_PATH=/path/to/ndlkotenocr-lite
-OCR_TEMP_ROOT=/tmp/ocr_temp
+OCR_TEMP_ROOT=/path/to/proofreading-app/cache/ocr_temp
+DICT_DIR=/path/to/proofreading-app/data/dictionaries
+EVALUATION_DIR=/path/to/proofreading-app/evaluation/logs
 BACKEND_HOST=127.0.0.1
 BACKEND_PORT=8000
 ```
@@ -155,13 +208,14 @@ Open the local URL shown by Vite in your browser.
 
 ## Basic Workflow
 
-1. Prepare Markdown notes containing OCR results inside your Obsidian Vault.
-2. Start the backend and frontend.
-3. Open a target note from the file list or search interface.
-4. Review OCR text and page images in the browser.
-5. Accept candidates, enter manual corrections, skip spans, or reject suggestions.
-6. Save the corrected result back to the Markdown file.
-7. Review proofreading and evaluation logs to improve dictionaries and rules.
+1. Prepare Markdown notes with embedded images inside your Obsidian Vault.
+2. Configure the target Vault through `.env` or the settings UI.
+3. Start the backend and frontend.
+4. Open a target note from the file list or search interface.
+5. Review OCR text and page images in the browser.
+6. Accept candidates, enter manual corrections, skip spans, or reject suggestions.
+7. Save the corrected result back to the Markdown file inside the Vault.
+8. Review evaluation logs outside the Vault to improve dictionaries and rules.
 
 ## Logs and Evaluation Data
 
@@ -172,7 +226,7 @@ The application records not only final corrections but also the decision-making 
 - `user_actions.jsonl`: Log of user actions such as skip and reject
 - `learning_candidates.jsonl`: Candidate log for future dictionary and rule improvements
 
-The log output directory can be changed through `EVALUATION_DIR` in `.env`. If it is not set, the default path is `proofreading-app/evaluation/logs` inside the Vault.
+The log output directory can be changed through `EVALUATION_DIR` in `.env`. In the outside-Vault workflow, configure it to point to a directory such as `evaluation/logs` under the application directory.
 
 ## Roadmap
 
@@ -203,6 +257,13 @@ This roadmap summarizes the current development status.
 - [x] Settings UI and localStorage persistence
 - [x] Settings specification in `SETTINGS_SCHEMA.md`
 
+### In Migration
+
+- [ ] Move the application repository outside the Obsidian Vault
+- [ ] Keep dictionaries, evaluation logs, and temporary files outside the Vault by default
+- [ ] Unify the workflow around selecting a target Vault at startup or in settings
+- [ ] Exclude cache, logs, and development files from Obsidian Sync
+
 ### Under Observation
 
 - [ ] Experimental observation phase V2
@@ -227,11 +288,14 @@ This roadmap summarizes the current development status.
 - The main UI is currently a standalone web application. Embedded use as an Obsidian plugin is planned for a future version.
 - OCR execution requires a separate `ndlkotenocr-lite` setup.
 - Existing OCR text can be proofread without OCR execution, but image and OCR file conventions depend on each user's Vault structure.
-- Logs may contain research data, local file paths, or unpublished transcription content. Review logs carefully before publishing or sharing them.
+- Saving corrections modifies Markdown files inside the target Vault. Even if the application itself lives outside the Vault, you should still back up the target Vault.
+- Logs and cache files may contain research data, local file paths, or unpublished transcription content. Review them carefully before publishing or sharing.
 
 ## Notes on Public Sharing
 
 This project assumes a local research environment. Before publishing logs, evaluation data, dictionaries, or sample materials, make sure that they do not include unpublished sources, personal information, local file paths, or work-in-progress transcriptions.
+
+After the outside-Vault migration, keep the public application repository clearly separated from private research data stored in the Obsidian Vault.
 
 ## Version
 
