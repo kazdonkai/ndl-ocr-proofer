@@ -58,24 +58,6 @@ class RunOcrRequest(BaseModel):
     status_property_name: str = "analyzed_status"
 
 
-class OcrSettings(BaseModel):
-    rename_images_before_ocr: bool = True
-    write_status_after_ocr: bool = True
-
-
-class UpdateOcrSettingsRequest(BaseModel):
-    rename_images_before_ocr: bool
-    write_status_after_ocr: bool
-
-
-class DictionarySettings(BaseModel):
-    use_experimental: bool = False
-
-
-class UpdateDictionarySettingsRequest(BaseModel):
-    use_experimental: bool
-
-
 class RunOcrPageRequest(BaseModel):
     page: int  # 1-based page number
 
@@ -211,6 +193,9 @@ class TemporaryDictEntry(BaseModel):
     last_seen_at: str = ""
     note: str = ""
     is_stale: bool = False        # last_seen_at が 180 日以上前かどうか（参照用）
+    source_file: str = ""         # 所属 CSV ファイル名
+    approval_count: int = 0       # 同一エントリへの再登録（承認）回数
+    is_promotion_candidate: bool = False  # approval_count が閾値以上（temporary上の注目表示専用）
 
 
 class RegisterTemporaryTermRequest(BaseModel):
@@ -236,3 +221,90 @@ class TemporaryDictListResponse(BaseModel):
     terms: list[TemporaryDictEntry]
     total: int
     enabled_count: int
+    files: list[str] = []  # 全 temporary ファイル名（空ファイル含む）
+
+
+# ── approved辞書 GUI 用モデル (Phase 5: 辞書GUI) ─────────────────────────────
+
+class ApprovedDictEntry(BaseModel):
+    """approved/ CSV の 1 エントリ（GUI 表示・編集用）。"""
+    term: str
+    normalized: str = ""
+    variants: str = ""
+    reading: str = ""
+    category: str = ""
+    domain: str = ""
+    priority: float = 0.8
+    protect: bool = False
+    source: str = "manual"
+    approved: bool = True
+    source_file: str = ""
+
+
+class AddApprovedEntryRequest(BaseModel):
+    filename: str
+    term: str
+    normalized: str = ""
+    variants: str = ""
+    reading: str = ""
+    category: str = ""
+    domain: str = ""
+    priority: float = 0.8
+    protect: bool = False
+    source: str = "manual"
+    approved: bool = True
+
+
+class UpdateApprovedEntryRequest(BaseModel):
+    """部分更新用。None フィールドは変更しない。"""
+    normalized: Optional[str] = None
+    variants: Optional[str] = None
+    reading: Optional[str] = None
+    category: Optional[str] = None
+    domain: Optional[str] = None
+    priority: Optional[float] = None
+    protect: Optional[bool] = None
+    source: Optional[str] = None
+    approved: Optional[bool] = None
+
+
+class ApprovedDictListResponse(BaseModel):
+    entries: list[ApprovedDictEntry]
+    total: int
+    files: list[str]
+
+
+# ── 辞書運用フロー用モデル（temporary GUI / 昇格 / ファイル管理） ──────────────
+
+class UpdateTemporaryEntryRequest(BaseModel):
+    """PUT /api/dictionary/temporary/{filename}/{term} のリクエスト。None フィールドは変更しない。"""
+    normalized: Optional[str] = None
+    variants: Optional[str] = None
+    reading: Optional[str] = None
+    category: Optional[str] = None
+    domain: Optional[str] = None
+    priority: Optional[float] = None
+    protect: Optional[bool] = None
+    note: Optional[str] = None
+    enabled: Optional[bool] = None
+
+
+class PromoteEntryRequest(BaseModel):
+    """POST /api/dictionary/promote のリクエスト。"""
+    source_file: str           # temporary ファイル名（例: user_manual_temporary.csv）
+    term: str
+    target_file: str           # 昇格先 approval ファイル名
+    on_conflict: str = "check" # "check" | "overwrite" | "skip"
+
+
+class PromoteEntryResponse(BaseModel):
+    """POST /api/dictionary/promote のレスポンス。"""
+    status: str                            # "promoted" | "overwritten" | "skipped" | "conflict"
+    entry: Optional[ApprovedDictEntry] = None
+    conflict: Optional[dict] = None        # 競合時: {"existing": ApprovedDictEntry dict}
+
+
+class CreateDictFileRequest(BaseModel):
+    """POST /api/dictionary/files のリクエスト。"""
+    dict_type: str   # "approval" | "temporary"
+    filename: str    # .csv 拡張子を含む

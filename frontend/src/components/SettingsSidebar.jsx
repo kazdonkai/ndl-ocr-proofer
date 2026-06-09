@@ -16,10 +16,18 @@ export default function SettingsSidebar({
   isRescanning, rescanNotice, onVaultRescan,
   onExportCsv, onExportJson,
   onFlushEvents,
-  ocrSettings, onOcrSettingChange,
-  dictionarySettings, onDictionarySettingChange, isSavingDictionary,
+  // Phase 3C: ocrSettings / dictionarySettings / isSavingDictionary 廃止。
+  // appConfig?.ocr / appConfig?.dictionary / appConfig?.status を正本として直接参照する。
+  // isSavingConfig が OCR / dictionary / status / CONFIG セクションすべての concurrent save ガード。
+  onOcrSettingChange,
+  onDictionarySettingChange,
   temporaryTerms = [], isLoadingTempDict = false, tempDictError = null,
   onRegisterTemporaryTerm, onToggleTemporaryTerm,
+  appConfig = null,
+  configStatus = null,
+  onConfigUpdate,
+  isSavingConfig = false,
+  configSaveError = null,
   onClose,
 }) {
   const [flushStatus, setFlushStatus] = useState(null); // null | 'pending' | 'ok' | 'error'
@@ -192,14 +200,17 @@ export default function SettingsSidebar({
 
       <div className="settings-section-label">OCR</div>
 
+      {/* Phase 3C: appConfig?.ocr を正本として参照。isSavingConfig が concurrent save ガード。 */}
       <div className="setting-item">
         <label className="setting-check-label">
           <input
             type="checkbox"
-            checked={ocrSettings?.rename_images_before_ocr ?? true}
+            checked={appConfig?.ocr?.rename_images_before_ocr ?? true}
+            disabled={isSavingConfig || configStatus?.config_file_exists === false}
             onChange={e => onOcrSettingChange?.('rename_images_before_ocr', e.target.checked)}
           />
           OCR前に画像をリネーム
+          {isSavingConfig && <span className="setting-saving-indicator"> 保存中…</span>}
         </label>
         <span className="setting-hint">ノート名＋連番形式にリネームしてから OCR を実行します</span>
       </div>
@@ -208,7 +219,8 @@ export default function SettingsSidebar({
         <label className="setting-check-label">
           <input
             type="checkbox"
-            checked={ocrSettings?.write_status_after_ocr ?? true}
+            checked={appConfig?.ocr?.write_status_after_ocr ?? true}
+            disabled={isSavingConfig || configStatus?.config_file_exists === false}
             onChange={e => onOcrSettingChange?.('write_status_after_ocr', e.target.checked)}
           />
           OCR完了後にステータスを書き込む
@@ -218,16 +230,17 @@ export default function SettingsSidebar({
 
       <div className="settings-section-label">辞書</div>
 
+      {/* Phase 3C: appConfig?.dictionary を正本として参照。isSavingConfig が concurrent save ガード。 */}
       <div className="setting-item">
         <label className="setting-check-label">
           <input
             type="checkbox"
-            checked={dictionarySettings?.use_experimental ?? false}
-            disabled={isSavingDictionary}
+            checked={appConfig?.dictionary?.use_experimental ?? false}
+            disabled={isSavingConfig || configStatus?.config_file_exists === false}
             onChange={e => onDictionarySettingChange?.('use_experimental', e.target.checked)}
           />
           temporary辞書を使用 (staging/)
-          {isSavingDictionary && <span className="setting-saving-indicator"> 保存中…</span>}
+          {isSavingConfig && <span className="setting-saving-indicator"> 保存中…</span>}
         </label>
         <span className="setting-hint">staging/ ディレクトリのtemporary辞書も読み込みます。候補スコアに ×0.8 の減衰が適用されます</span>
       </div>
@@ -400,6 +413,144 @@ export default function SettingsSidebar({
         />
         <span className="setting-hint">この比率以上のカタカナ優勢ファイルでのみ「全ページ カタカナ化」ボタンが表示されます（最低値 85% 固定）</span>
       </div>
+
+      {/* ── CONFIG セクション (Phase 2B-2 — 4キー編集可能) ── */}
+      <div className="settings-section-label" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span>CONFIG (app.toml)</span>
+        {isSavingConfig && (
+          <span style={{ fontSize: '0.65rem', fontWeight: 'normal', color: '#60a5fa' }}>保存中…</span>
+        )}
+      </div>
+
+      {configStatus ? (
+        <div className="config-status-block">
+          {/* 設定ファイル種別バッジ */}
+          <div className="config-status-row">
+            <span className="config-status-label">設定ファイル</span>
+            <span className={`config-status-badge ${configStatus.config_file_exists ? 'config-badge-ok' : 'config-badge-fallback'}`}>
+              {configStatus.config_file_exists ? 'app.toml' : 'YAML fallback'}
+            </span>
+          </div>
+
+          {appConfig && (
+            <>
+              {/* ── 編集可能: ocr.rename_images_before_ocr ── */}
+              <div className="config-kv-row config-kv-editable">
+                <label className="config-kv-check-label">
+                  <input
+                    type="checkbox"
+                    checked={appConfig.ocr?.rename_images_before_ocr ?? true}
+                    disabled={isSavingConfig || !configStatus.config_file_exists}
+                    onChange={e => onConfigUpdate?.({ 'ocr.rename_images_before_ocr': e.target.checked })}
+                  />
+                  <span className="config-kv-key">OCR リネーム</span>
+                </label>
+              </div>
+
+              {/* ── 編集可能: ocr.write_status_after_ocr ── */}
+              <div className="config-kv-row config-kv-editable">
+                <label className="config-kv-check-label">
+                  <input
+                    type="checkbox"
+                    checked={appConfig.ocr?.write_status_after_ocr ?? true}
+                    disabled={isSavingConfig || !configStatus.config_file_exists}
+                    onChange={e => onConfigUpdate?.({ 'ocr.write_status_after_ocr': e.target.checked })}
+                  />
+                  <span className="config-kv-key">OCR 後ステータス書込</span>
+                </label>
+              </div>
+
+              {/* ── 編集可能: dictionary.use_experimental ── */}
+              <div className="config-kv-row config-kv-editable">
+                <label className="config-kv-check-label">
+                  <input
+                    type="checkbox"
+                    checked={appConfig.dictionary?.use_experimental ?? false}
+                    disabled={isSavingConfig || !configStatus.config_file_exists}
+                    onChange={e => onConfigUpdate?.({ 'dictionary.use_experimental': e.target.checked })}
+                  />
+                  <span className="config-kv-key">temporary辞書 (staging/)</span>
+                </label>
+              </div>
+
+              {/* ── 編集可能: status.property_name (Phase 3B) ── */}
+              <div className="config-kv-row config-kv-editable">
+                <span className="config-kv-key">status プロパティ名</span>
+                <input
+                  type="text"
+                  className="config-kv-input"
+                  defaultValue={appConfig.status?.property_name ?? ''}
+                  key={appConfig.status?.property_name}
+                  disabled={isSavingConfig || !configStatus.config_file_exists}
+                  onBlur={e => {
+                    const trimmed = e.target.value.trim();
+                    if (trimmed && trimmed !== appConfig.status?.property_name) {
+                      onConfigUpdate?.({ 'status.property_name': trimmed });
+                    } else if (!trimmed) {
+                      // 空文字は拒否: 元の値に戻す
+                      e.target.value = appConfig.status?.property_name ?? '';
+                    }
+                  }}
+                />
+              </div>
+
+              {/* ── 編集可能: status.ocr_done_value (Phase 3B) ── */}
+              <div className="config-kv-row config-kv-editable">
+                <span className="config-kv-key">OCR完了値</span>
+                <input
+                  type="number"
+                  className="config-kv-input config-kv-input-num"
+                  min="1"
+                  step="1"
+                  defaultValue={appConfig.status?.ocr_done_value ?? 1}
+                  key={appConfig.status?.ocr_done_value}
+                  disabled={isSavingConfig || !configStatus.config_file_exists}
+                  onBlur={e => {
+                    const val = parseInt(e.target.value, 10);
+                    if (!isNaN(val) && val >= 1 && val !== appConfig.status?.ocr_done_value) {
+                      onConfigUpdate?.({ 'status.ocr_done_value': val });
+                    } else {
+                      // 不正値は元に戻す
+                      e.target.value = appConfig.status?.ocr_done_value ?? 1;
+                    }
+                  }}
+                />
+              </div>
+
+              {/* ── 編集可能: auto_downweight.mode ── */}
+              <div className="config-kv-row config-kv-editable">
+                <span className="config-kv-key">AUTO_DOWNWEIGHT</span>
+                <select
+                  className="config-kv-select"
+                  value={appConfig.auto_downweight?.mode ?? 'off'}
+                  disabled={isSavingConfig || !configStatus.config_file_exists}
+                  onChange={e => onConfigUpdate?.({ 'auto_downweight.mode': e.target.value })}
+                >
+                  <option value="off">off</option>
+                  <option value="semi">semi</option>
+                </select>
+              </div>
+
+              {/* エラー表示 */}
+              {configSaveError && (
+                <div className="config-save-error">{configSaveError}</div>
+              )}
+            </>
+          )}
+
+          {/* パス表示（read-only） */}
+          <div className="config-path-row">
+            <span className="config-path-label">config</span>
+            <span className="config-path-val" title={configStatus.config_file_path}>{configStatus.config_file_path?.split('/').slice(-2).join('/') ?? '—'}</span>
+          </div>
+          <div className="config-path-row">
+            <span className="config-path-label">dict</span>
+            <span className="config-path-val" title={configStatus.dict_dir}>{configStatus.dict_dir?.split('/').slice(-3).join('/') ?? '—'}</span>
+          </div>
+        </div>
+      ) : (
+        <div className="setting-hint" style={{ paddingLeft: '8px' }}>取得中…</div>
+      )}
 
       <div className="settings-section-label">データ</div>
 

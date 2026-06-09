@@ -6,47 +6,17 @@ import uuid
 import unicodedata
 from pathlib import Path
 from dotenv import load_dotenv
-try:
-    import yaml as _yaml
-except ImportError:
-    _yaml = None
 
 load_dotenv(Path(__file__).parent / ".env")
+
+# config_loader は load_dotenv 後にインポートすること（env var 依存のため）
+from config_loader import get_config_loader  # noqa: E402
 
 VAULT_ROOT = Path(os.environ["VAULT_ROOT"])
 OCR_ENGINE_PATH = Path(os.environ["OCR_ENGINE_PATH"])
 TEMP_ROOT = Path(os.getenv("OCR_TEMP_ROOT", "/tmp/ocr_temp"))
 TEMP_IMAGE_DIR = TEMP_ROOT / "images"
 TEMP_OCR_DIR = TEMP_ROOT / "ocr_raw"
-
-def _load_ocr_bool(key: str, default: bool = True) -> bool:
-    """settings.yaml の ocr.{key} を読み込む。設定なし・読み込み失敗時は default。"""
-    if _yaml is None:
-        return default
-    settings_path = VAULT_ROOT / ".agent" / "settings.yaml"
-    if not settings_path.exists():
-        return default
-    try:
-        with open(settings_path, "r", encoding="utf-8") as f:
-            data = _yaml.safe_load(f) or {}
-        return bool(data.get("ocr", {}).get(key, default))
-    except Exception:
-        return default
-
-
-def _load_status_value() -> int:
-    """settings.yaml の status.OCR完了値 を読み込む。設定なし・読み込み失敗時は 2。"""
-    if _yaml is None:
-        return 2
-    settings_path = VAULT_ROOT / ".agent" / "settings.yaml"
-    if not settings_path.exists():
-        return 2
-    try:
-        with open(settings_path, "r", encoding="utf-8") as f:
-            data = _yaml.safe_load(f) or {}
-        return int(data.get("status", {}).get("OCR完了値", 2))
-    except Exception:
-        return 2
 
 
 def ocr_image(image_path: Path) -> str:
@@ -158,7 +128,8 @@ def process_and_run_ocr(md_path_str: str, status_property_name: str = "analyzed_
 
     # 3. リネーム・移動・OCR実行
     note_stem = unicodedata.normalize('NFC', md_path.stem)
-    do_rename = _load_ocr_bool("rename_images_before_ocr")
+    _ocr_cfg = get_config_loader().get_ocr_settings()
+    do_rename = _ocr_cfg.rename_images_before_ocr
     if do_rename:
         target_files_dir.mkdir(exist_ok=True)
     new_image_sections = []
@@ -229,8 +200,8 @@ def process_and_run_ocr(md_path_str: str, status_property_name: str = "analyzed_
         final_content = "\n".join(cleaned_lines) + "\n\n## 記録" + images_str
 
     # フロントマターのステータスを更新（write_status_after_ocr が true の場合のみ）
-    if _load_ocr_bool("write_status_after_ocr"):
-        ocr_done_value = _load_status_value()
+    if _ocr_cfg.write_status_after_ocr:
+        ocr_done_value = get_config_loader().get_status_settings().ocr_done_value
         fm_match = re.match(r"^---\n(.*?)\n---", final_content, re.DOTALL)
         if fm_match:
             fm_content = fm_match.group(1)

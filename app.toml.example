@@ -1,0 +1,56 @@
+# app.toml.example — NDL古典籍OCR 校正支援アプリ 設定ファイルテンプレート
+#
+# 使い方:
+#   cp app.toml.example app.toml
+#   その後、各設定を環境に合わせて編集してください。
+#
+# このファイルはリポジトリにコミットされています（機密情報なし）。
+# 実際の app.toml は .gitignore 対象にしてください（ローカル設定ファイル扱い）。
+#
+# 設定変更はサーバー再起動なしに反映できる設計です（将来の hot-reload 対応予定）。
+# 現時点では変更後に GET /api/config でロード確認を推奨します。
+#
+# ────────────────────────────────────────────────────────────────
+# キー分類:
+#   [TOML管理] … このファイルで管理。settings.yaml からの移行対象。
+#   [YAML残留] … .agent/settings.yaml で管理。TOMLに移さないキー。
+#   [ENV専管]  … .env で管理。パス・サーバー設定など環境依存の情報。
+# ────────────────────────────────────────────────────────────────
+
+# ── OCR 設定 ──────────────────────────────────────────────────────
+# [TOML管理] settings.yaml: ocr.rename_images_before_ocr → TOML: ocr.rename_images_before_ocr
+# [TOML管理] settings.yaml: ocr.write_status_after_ocr   → TOML: ocr.write_status_after_ocr
+[ocr]
+rename_images_before_ocr = true   # OCR前に画像を「ノート名+連番」形式にリネームする
+write_status_after_ocr   = true   # OCR完了後にフロントマターへステータス値を書き込む
+
+# ── 辞書設定 ──────────────────────────────────────────────────────
+# [TOML管理] settings.yaml: dictionary.use_experimental → TOML: dictionary.use_experimental
+[dictionary]
+use_experimental = false   # staging/ の実験的辞書を読み込む（CandidateEngine で ×0.8 減衰適用）
+                           # 新規環境では false 推奨（experimental辞書が整備されていない場合があるため）
+
+# ── ステータス設定 ────────────────────────────────────────────────
+# [TOML管理] settings.yaml: status.プロパティ名 → TOML: status.property_name（英語キー）
+# [TOML管理] settings.yaml: status.OCR完了値   → TOML: status.ocr_done_value（英語キー）
+# [YAML残留] settings.yaml: status.値の定義    → 永続 YAML 残留（日本語ラベル定義はTOML非対象）
+[status]
+property_name  = "minji_status"   # フロントマターに書き込むステータスプロパティ名
+ocr_done_value = 2                # OCR実行後に設定するステータス値
+
+# ── 自動降格設定 ──────────────────────────────────────────────────
+# [TOML管理] settings.yaml: auto_downweight.mode → TOML: auto_downweight.mode
+[auto_downweight]
+mode = "off"   # "off" | "semi"（semi モードは将来実装予定。現時点では "off" のみ有効）
+
+# ── PDF OCR import（post-migration 予定・未実装） ──────────────────
+# 設計文書: docs/pdf_ocr_design.md
+# 実装条件: outside-Vault 移行が安定した後。pypdfium2 は未追加。
+#
+# パス系の設定（PDF_ALLOWED_ROOTS）は .env 専管。
+# 解像度・フォーマット・キャッシュ保持時間は将来 TOML に移す候補。
+#
+# [pdf]
+# render_dpi    = 300    # PDF→画像変換の解像度（ENV: PDF_RENDER_DPI）
+# render_format = "jpg"  # "jpg" | "png"（ENV: PDF_RENDER_FORMAT）
+# cache_ttl_hours = 24   # 一時ページ画像の保持時間（ENV: PDF_CACHE_TTL_HOURS）

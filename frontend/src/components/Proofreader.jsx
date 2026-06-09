@@ -271,6 +271,7 @@ const Proofreader = forwardRef(function Proofreader({ document, currentPage, vie
 
   const textareaRef = useRef(null);
   const highlightLayerRef = useRef(null);
+  const editorContainerRef = useRef(null);
   // stale closure を避けるため最新の handleCandidateSelect / performUndo / performRedo / importCorrections を常に ref に保持
   const handleCandidateSelectRef = useRef(null);
   const performUndoRef = useRef(null);
@@ -303,6 +304,24 @@ const Proofreader = forwardRef(function Proofreader({ document, currentPage, vie
     editor.scrollLeft = 0;
     layer.scrollTop = 0;
     layer.scrollLeft = 0;
+  }, [writingMode]);
+
+  // 縦書きモード: ホイール縦スクロール → 横スクロールに変換（non-passive で preventDefault 可能に）
+  useEffect(() => {
+    const container = editorContainerRef.current;
+    if (!container || writingMode !== 'vertical') return;
+    const onWheel = (e) => {
+      const textarea = textareaRef.current;
+      const layer = highlightLayerRef.current;
+      if (!textarea) return;
+      // Ctrl+Wheel は他の用途（ブラウザズームなど）に譲る
+      if (e.ctrlKey) return;
+      e.preventDefault();
+      textarea.scrollLeft += e.deltaY;
+      if (layer) layer.scrollLeft = textarea.scrollLeft;
+    };
+    container.addEventListener('wheel', onWheel, { passive: false });
+    return () => container.removeEventListener('wheel', onWheel);
   }, [writingMode]);
 
   // cleanup debounce timer on unmount
@@ -1602,8 +1621,14 @@ const Proofreader = forwardRef(function Proofreader({ document, currentPage, vie
   const openManualCorrectionDialog = () => {
     const sel = getTextareaSelection();
     if (!sel) return;
-    setManualCorrectionDialog(sel);
-    setManualCorrectionInput(sel.selectedText);
+    // onMouseUp が末尾 \n を自動延長した場合、訂正対象からは除外する
+    let { selectedText, selectionStart, selectionEnd } = sel;
+    if (selectedText.endsWith('\n')) {
+      selectedText = selectedText.slice(0, -1);
+      selectionEnd = selectionEnd - 1;
+    }
+    setManualCorrectionDialog({ selectedText, selectionStart, selectionEnd });
+    setManualCorrectionInput(selectedText);
     setContextMenu(null);
   };
   // Ctrl+M useEffect から stale closure を回避するため毎レンダーで更新
@@ -1834,6 +1859,30 @@ const Proofreader = forwardRef(function Proofreader({ document, currentPage, vie
     }
   };
 
+  // 平文セグメント内の \n を ¶ マーク付きで描画する。
+  // pointer-events: none なので textarea のドラッグ選択を妨げない。
+  // data-pos 属性でテキスト位置を記録し、textarea の onMouseUp から参照する。
+  const renderTextWithPilcrows = (text, startOffset) => {
+    if (!text.includes('\n')) return text;
+    const parts = [];
+    let local = 0;
+    while (local <= text.length) {
+      const nlIdx = text.indexOf('\n', local);
+      if (nlIdx === -1) {
+        if (local < text.length) parts.push(text.slice(local));
+        break;
+      }
+      if (nlIdx > local) parts.push(text.slice(local, nlIdx));
+      const absPos = startOffset + nlIdx;
+      parts.push(
+        <span key={`¶${absPos}`} className="newline-mark" data-pos={absPos}>¶</span>
+      );
+      parts.push('\n');
+      local = nlIdx + 1;
+    }
+    return parts;
+  };
+
   const renderHighlights = (content) => {
     if (!content) return null;
     const elements = [];
@@ -1859,7 +1908,11 @@ const Proofreader = forwardRef(function Proofreader({ document, currentPage, vie
       if (spanStart < cursor) continue;
 
       if (spanStart > cursor) {
-        elements.push(<span key={`t_${cursor}`}>{content.slice(cursor, spanStart)}</span>);
+        elements.push(
+          <span key={`t_${cursor}`}>
+            {renderTextWithPilcrows(content.slice(cursor, spanStart), cursor)}
+          </span>
+        );
       }
 
       if (span._type === 'particle') {
@@ -1904,7 +1957,11 @@ const Proofreader = forwardRef(function Proofreader({ document, currentPage, vie
     }
 
     if (cursor < content.length) {
-      elements.push(<span key={`t_${cursor}`}>{content.slice(cursor)}</span>);
+      elements.push(
+        <span key={`t_${cursor}`}>
+          {renderTextWithPilcrows(content.slice(cursor), cursor)}
+        </span>
+      );
     }
 
     return <div className="highlight-text-container">{elements}</div>;
@@ -2185,7 +2242,7 @@ const Proofreader = forwardRef(function Proofreader({ document, currentPage, vie
               )}
             </div>
           ) : (
-            <div className={`editor-composite-container${writingMode === 'vertical' ? ' vertical' : ''}`}>
+            <div className={`editor-composite-container${writingMode === 'vertical' ? ' vertical' : ''}`} ref={editorContainerRef}>
               <div className="highlight-layer" ref={highlightLayerRef}>{mode === 'preview' ? renderHighlights(ocrContent) : null}</div>
               <textarea
                 ref={textareaRef}
@@ -2196,6 +2253,17 @@ const Proofreader = forwardRef(function Proofreader({ document, currentPage, vie
                 onContextMenu={handleEditorContextMenu}
                 spellCheck={false}
                 placeholder={mode === 'preview' ? "OCRテキストがありません" : "Markdownテキストを入力..."}
+                onMouseUp={(e) => {
+                  if (mode !== 'preview') return;
+                  const ta = e.currentTarget;
+                  const { selectionStart, selectionEnd } = ta;
+                  if (selectionStart === selectionEnd) return;
+                  // selectionEnd がちょうど \n の位置（行末直前で止まった状態）なら
+                  // 選択範囲を 1 文字延ばして \n を含める
+                  if (ocrContent[selectionEnd] === '\n') {
+                    ta.setSelectionRange(selectionStart, selectionEnd + 1);
+                  }
+                }}
               />
             </div>
           )}
@@ -2548,7 +2616,7 @@ const Proofreader = forwardRef(function Proofreader({ document, currentPage, vie
                 <div className="cad-body">
                   <div className="cad-row">
                     <span className="cad-label">選択テキスト</span>
-                    <span className="cad-value">「{manualCorrectionDialog.selectedText}」</span>
+                    <span className="cad-value">「{manualCorrectionDialog.selectedText.replace(/\n/g, '¶')}」</span>
                   </div>
                   <div className="cad-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
                     <span className="cad-label">訂正後</span>
