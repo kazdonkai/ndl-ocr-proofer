@@ -8,6 +8,10 @@ export function usePageView(documentData, initialViewMode = 'paged') {
   const pageBlockRefs = useRef([]);
   const isUserScrolling = useRef(true);
   const totalPages = documentData?.ocr_pages?.length || 0;
+  // Track the last confirmed non-null doc_id and viewMode so we can distinguish
+  // "reload of same document" (doc_id: X→null→X) from "new document opened" (X→null→Y).
+  const knownDocIdRef = useRef(null);
+  const prevEffectViewModeRef = useRef(null);
 
   // Seamless mode: IntersectionObserver for scroll-linked page tracking
   useEffect(() => {
@@ -31,14 +35,24 @@ export function usePageView(documentData, initialViewMode = 'paged') {
     return () => { clearTimeout(timer); observer.disconnect(); };
   }, [viewMode, totalPages, documentData?.doc_id]);
 
-  // Reset scroll position when switching to seamless or when document changes
+  // Reset scroll position when switching to seamless OR when a genuinely different
+  // document is opened. Does NOT reset on same-document reload (doc_id goes null→same).
   useEffect(() => {
-    if (viewMode === 'seamless' && imageContainerRef.current) {
-      isUserScrolling.current = false;
-      imageContainerRef.current.scrollTop = 0;
-      setCurrentPage(0);
-      setTimeout(() => { isUserScrolling.current = true; }, 500);
-    }
+    const docId = documentData?.doc_id ?? null;
+    const viewModeJustBecameSeamless = viewMode === 'seamless' && prevEffectViewModeRef.current !== 'seamless';
+    prevEffectViewModeRef.current = viewMode;
+
+    // isNewDoc: docId became a non-null value different from the last seen non-null value
+    const isNewDoc = docId !== null && docId !== knownDocIdRef.current;
+    if (docId !== null) knownDocIdRef.current = docId;
+
+    if (viewMode !== 'seamless' || !imageContainerRef.current) return;
+    if (!viewModeJustBecameSeamless && !isNewDoc) return;
+
+    isUserScrolling.current = false;
+    imageContainerRef.current.scrollTop = 0;
+    setCurrentPage(0);
+    setTimeout(() => { isUserScrolling.current = true; }, 500);
   }, [viewMode, documentData?.doc_id]);
 
   const scrollToPage = (idx) => {
@@ -74,5 +88,6 @@ export function usePageView(documentData, initialViewMode = 'paged') {
     totalPages,
     imageContainerRef, pageBlockRefs,
     handleNextPage, handlePrevPage, handleSeamlessImageClick,
+    scrollToPage,
   };
 }

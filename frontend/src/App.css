@@ -292,6 +292,52 @@ body {
   box-shadow: 0 0 30px rgba(0,0,0,0.5);
 }
 
+.image-zoom-wrapper {
+  min-width: 0;
+  cursor: zoom-in;
+}
+
+.image-zoom-wrapper img {
+  width: 100%;
+  max-width: none;
+  display: block;
+}
+
+/* paged mode zoom=1.0: natural size, constrained to container (both axes) */
+.image-zoom-wrapper.image-fit img {
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 100%;
+  display: block;
+}
+
+/* seamless mode zoom=1.0: natural size, constrained to width only (height scrolls freely) */
+.image-zoom-wrapper.image-fit-width img {
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  display: block;
+  margin: 0 auto;
+}
+
+
+.zoom-reset-btn {
+  background: rgba(255,255,255,0.15);
+  border: 1px solid rgba(255,255,255,0.3);
+  color: #fff;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  margin-left: 6px;
+  line-height: 1.4;
+}
+
+.zoom-reset-btn:hover {
+  background: rgba(255,255,255,0.28);
+}
+
 /* Resizer */
 .workspace-resizer {
   width: 4px;
@@ -1302,3 +1348,437 @@ body {
   opacity: 0.4;
   cursor: not-allowed;
 }
+
+/* ── CONFIG 表示専用セクション (Phase 2A) ─────────────────────────────────── */
+.config-status-block {
+  margin: 0 0 8px 0;
+  padding: 6px 8px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--border, #334155);
+  border-radius: 6px;
+  font-size: 0.72rem;
+}
+.config-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+.config-status-label {
+  color: var(--text-muted, #6b7280);
+}
+.config-status-badge {
+  font-size: 0.65rem;
+  padding: 1px 7px;
+  border-radius: 10px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+.config-badge-ok {
+  background: rgba(52, 211, 153, 0.12);
+  color: #34d399;
+  border: 1px solid rgba(52, 211, 153, 0.3);
+}
+.config-badge-fallback {
+  background: rgba(251, 191, 36, 0.12);
+  color: #fbbf24;
+  border: 1px solid rgba(251, 191, 36, 0.3);
+}
+.config-kv-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.config-kv-row:last-of-type {
+  border-bottom: none;
+}
+.config-kv-key {
+  color: var(--text-dim, #94a3b8);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.config-kv-val {
+  color: var(--text-main, #e2e8f0);
+  margin-left: 8px;
+  white-space: nowrap;
+}
+.config-kv-mono {
+  font-family: monospace;
+  font-size: 0.68rem;
+}
+.config-path-row {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  margin-top: 5px;
+  padding-top: 5px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+}
+.config-path-row:first-of-type {
+  margin-top: 4px;
+}
+.config-path-label {
+  font-size: 0.65rem;
+  color: var(--text-muted, #6b7280);
+  min-width: 28px;
+}
+.config-path-val {
+  font-family: monospace;
+  font-size: 0.65rem;
+  color: var(--text-dim, #94a3b8);
+  word-break: break-all;
+}
+
+/* ── CONFIG 編集可能セル (Phase 2B-2) ── */
+.config-kv-editable {
+  padding: 3px 0;
+}
+/* チェックボックス付きラベル行 */
+.config-kv-check-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  width: 100%;
+  user-select: none;
+}
+.config-kv-check-label input[type="checkbox"] {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+  accent-color: var(--accent, #3b82f6);
+  cursor: pointer;
+}
+.config-kv-check-label input[type="checkbox"]:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+/* auto_downweight.mode セレクト */
+.config-kv-select {
+  font-size: 0.7rem;
+  background: var(--bg-dark, #0f172a);
+  color: var(--text-main, #f8fafc);
+  border: 1px solid var(--border, #334155);
+  border-radius: 4px;
+  padding: 1px 4px;
+  cursor: pointer;
+  max-width: 60px;
+}
+.config-kv-select:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+/* read-only キー名（status.* など）— やや dim 表示 */
+.config-kv-readonly-key {
+  opacity: 0.65;
+}
+.config-kv-readonly-val {
+  opacity: 0.65;
+}
+/* 編集可能 input（status.property_name / status.ocr_done_value など）Phase 3B */
+.config-kv-input {
+  font-size: 0.7rem;
+  font-family: 'Courier New', Courier, monospace;
+  background: var(--bg-dark, #0f172a);
+  color: var(--text-main, #f8fafc);
+  border: 1px solid var(--border, #334155);
+  border-radius: 4px;
+  padding: 1px 4px;
+  min-width: 0;
+  max-width: 120px;
+  width: 100%;
+}
+.config-kv-input:focus {
+  outline: 1px solid #60a5fa;
+  border-color: #60a5fa;
+}
+.config-kv-input:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.config-kv-input-num {
+  max-width: 56px;
+}
+/* 保存エラーメッセージ */
+.config-save-error {
+  margin-top: 5px;
+  padding: 4px 6px;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 4px;
+  font-size: 0.68rem;
+  color: #f87171;
+  word-break: break-word;
+}
+
+/* ── DictionaryManager ──────────────────────────────────────────────── */
+.dict-manager-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 400;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 70px;
+  overflow-y: auto;
+}
+
+.dict-manager-modal {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  width: 92vw;
+  max-width: 1200px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  font-size: 0.82rem;
+}
+
+.dict-manager-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.dict-manager-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.dict-manager-header-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.dict-manager-close {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 1rem;
+  padding: 2px 6px;
+}
+.dict-manager-close:hover { color: var(--text-main); }
+
+.dict-btn {
+  padding: 4px 10px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+.dict-btn-primary { background: #5b9bd5; color: #fff; border-color: #4a87c0; }
+.dict-btn-primary:hover { background: #4a87c0; }
+.dict-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+.dict-btn-secondary { background: transparent; color: var(--text-dim); }
+.dict-btn-secondary:hover { color: var(--text-main); border-color: var(--text-dim); }
+.dict-btn-danger { background: #c97070; color: #fff; border-color: #b45e5e; }
+.dict-btn-danger:hover { background: #b45e5e; }
+.dict-btn-promote { background: #c49a3a; color: #fff; border-color: #a8812e; }
+.dict-btn-promote:hover { background: #a8812e; }
+.dict-btn-promote:disabled { opacity: 0.5; cursor: not-allowed; }
+.dict-btn-sm { padding: 2px 7px; font-size: 0.72rem; }
+
+.dict-add-form {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(59, 130, 246, 0.05);
+  flex-shrink: 0;
+}
+.dict-add-form-title { font-size: 0.8rem; color: var(--text-dim); margin-bottom: 6px; }
+
+.dict-form-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+.dict-form-row label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  flex: 1;
+  min-width: 100px;
+}
+.dict-form-row input[type="text"],
+.dict-form-row input[type="number"],
+.dict-form-row select {
+  background: var(--bg-dark);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-main);
+  padding: 3px 6px;
+  font-size: 0.78rem;
+}
+.dict-form-check {
+  flex-direction: row !important;
+  align-items: center;
+  gap: 5px !important;
+}
+.dict-form-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.dict-filters {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.dict-file-select {
+  background: var(--bg-dark);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-main);
+  padding: 3px 8px;
+  font-size: 0.78rem;
+}
+.dict-search {
+  flex: 1;
+  background: var(--bg-dark);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-main);
+  padding: 4px 8px;
+  font-size: 0.78rem;
+}
+.dict-count { color: var(--text-dim); font-size: 0.72rem; white-space: nowrap; }
+
+.dict-table-wrapper {
+  overflow-y: auto;
+  flex: 1;
+  padding: 0 16px 12px;
+}
+.dict-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+}
+.dict-table th {
+  position: sticky;
+  top: 0;
+  background: var(--bg-panel);
+  color: var(--text-dim);
+  text-align: left;
+  padding: 6px 6px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.dict-table td {
+  padding: 4px 6px;
+  border-bottom: 1px solid rgba(51, 65, 85, 0.4);
+  vertical-align: middle;
+}
+.dict-table tr:hover td { background: rgba(255, 255, 255, 0.03); }
+.dict-row-editing td { background: rgba(59, 130, 246, 0.05); }
+.dict-row-editing input {
+  background: var(--bg-dark);
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  color: var(--text-main);
+  padding: 2px 4px;
+  width: 100%;
+  font-size: 0.76rem;
+}
+.dict-cell-term { font-weight: 500; color: var(--text-main); }
+/* 昇格候補バッジ: temporary 専用の注目表示。approval 済みを意味しない */
+.dict-badge-candidate {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 0.68rem;
+  font-weight: bold;
+  background: #fff3cd;
+  color: #7c5e00;
+  border: 1px solid #f0c040;
+  vertical-align: middle;
+  cursor: default;
+  user-select: none;
+}
+.dict-cell-dim { color: var(--text-dim); }
+.dict-row-actions { display: flex; gap: 4px; align-items: center; white-space: nowrap; }
+
+.dict-loading { padding: 24px; text-align: center; color: var(--text-dim); }
+.dict-empty {
+  padding: 32px 24px;
+  text-align: center;
+  color: var(--text-dim);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  border-top: 1px solid var(--border-light, #e5e7eb);
+}
+.dict-empty p { margin: 0; }
+.dict-empty-hint { font-size: 0.85rem; color: #888; line-height: 1.6; }
+
+.dict-msg-error {
+  margin: 4px 16px;
+  padding: 4px 8px;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 4px;
+  color: #f87171;
+  font-size: 0.75rem;
+}
+.dict-msg-info {
+  margin: 4px 16px;
+  padding: 4px 8px;
+  background: rgba(34, 197, 94, 0.1);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  border-radius: 4px;
+  color: #86efac;
+  font-size: 0.75rem;
+}
+
+.dict-confirm-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+}
+.dict-confirm-box {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 20px 24px;
+  text-align: center;
+  font-size: 0.85rem;
+}
+.dict-confirm-box p { margin-bottom: 14px; line-height: 1.6; }
+
+.dict-msg-warn {
+  margin: 4px 0;
+  padding: 6px 10px;
+  background: rgba(251, 191, 36, 0.1);
+  border: 1px solid rgba(251, 191, 36, 0.4);
+  border-radius: 4px;
+  color: #fbbf24;
+  font-size: 0.82rem;
+  text-align: left;
+}
+

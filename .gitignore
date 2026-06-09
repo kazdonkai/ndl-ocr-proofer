@@ -1,6 +1,20 @@
 # Environment variables (never commit)
 backend/.env
 
+# Application config (local settings — commit app.toml.example, not app.toml)
+app.toml
+
+# Runtime logs (start.sh output — root-level only)
+/logs/
+
+# Evaluation logs that may contain unpublished research material
+# correction_events.jsonl is excluded below because it is tracked in v1.0.0 history
+# and continues to contain only test-file references.
+# The following three files contain private vault document paths or OCR text and are excluded.
+evaluation/logs/span_accepted.jsonl
+evaluation/logs/user_actions.jsonl
+evaluation/logs/learning_candidates.jsonl
+
 # Python
 __pycache__/
 *.py[cod]

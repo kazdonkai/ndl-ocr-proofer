@@ -2,6 +2,7 @@ import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react
 import Proofreader from './components/Proofreader';
 import SettingsSidebar from './components/SettingsSidebar';
 import FileBrowserSidebar from './components/FileBrowserSidebar';
+import DictionaryManager from './components/DictionaryManager';
 import './App.css';
 
 import { useSettings } from './state/useSettings';
@@ -11,7 +12,9 @@ import { usePageView } from './state/usePageView';
 import { useVaultFiles } from './state/useVaultFiles';
 import { useDocumentOpen } from './state/useDocumentOpen';
 
-import { saveDocumentPage, runOcrForDocument as apiRunOcrForDocument, runOcrForPage as apiRunOcrForPage, updateDocumentStatus, getOcrSettings, updateOcrSettings, getDictionarySettings, updateDictionarySettings, getTemporaryTerms, registerTemporaryTerm, toggleTemporaryTerm } from './services/documentService';
+import { saveDocumentPage, runOcrForDocument as apiRunOcrForDocument, runOcrForPage as apiRunOcrForPage, updateDocumentStatus, getTemporaryTerms, registerTemporaryTerm, toggleTemporaryTerm, getAppConfig, getConfigStatus, updateAppConfig } from './services/documentService';
+// Phase 3D: getOcrSettings / getDictionarySettings は documentService.js からも削除済み（旧 GET /api/settings/{ocr,dictionary} は backend からも削除済み）
+// Phase 2C: updateOcrSettings / updateDictionarySettings は旧 API（deprecated）のため App.jsx 内では未使用
 import { logDictionarySettingChanged } from './services/learningEventLogger';
 import {
   normalizeCorrections,
@@ -32,48 +35,28 @@ function App() {
   const { splitRatio, isDragging, workspaceRef, handleMouseDown } = useSplitPane();
   const vaultFiles = useVaultFiles();
 
-  // ─── OCR settings (.agent/settings.yaml, read/written via backend API) ───
-  const [ocrSettings, setOcrSettings] = useState({ rename_images_before_ocr: true });
-  useEffect(() => {
-    getOcrSettings().then(s => setOcrSettings(s)).catch(() => {});
-  }, []);
+  // ─── OCR setting change (Phase 3C: appConfig 正本・楽観更新→handleConfigUpdate 経由に統一) ───
   const handleOcrSettingChange = async (key, value) => {
-    const updated = { ...ocrSettings, [key]: value };
-    setOcrSettings(updated);
-    try {
-      await updateOcrSettings(updated);
-    } catch (err) {
-      console.error('OCR設定の保存に失敗:', err);
-    }
+    if (isSavingConfig) return; // concurrent save 防止
+    const prevConfig = appConfig;
+    // 楽観更新: appConfig.ocr を即時更新
+    setAppConfig(prev => prev ? { ...prev, ocr: { ...prev.ocr, [key]: value } } : prev);
+    const ok = await handleConfigUpdate({ [`ocr.${key}`]: value });
+    if (!ok) setAppConfig(prevConfig); // 失敗時は appConfig 全体を revert
   };
 
-  // ─── Dictionary settings (.agent/settings.yaml, read/written via backend API) ───
-  const [dictionarySettings, setDictionarySettings] = useState({ use_experimental: false });
-  const [isSavingDictionary, setIsSavingDictionary] = useState(false);
-  useEffect(() => {
-    getDictionarySettings().then(s => setDictionarySettings(s)).catch(() => {});
-  }, []);
+  // ─── Dictionary setting change (Phase 3C: appConfig 正本・楽観更新→handleConfigUpdate 経由に統一) ───
   const handleDictionarySettingChange = async (key, value) => {
-    if (isSavingDictionary) return;
-    const prevSettings = { ...dictionarySettings };
-    const updated = { ...dictionarySettings, [key]: value };
-    setDictionarySettings(updated);
-    setIsSavingDictionary(true);
-    try {
-      await updateDictionarySettings(updated);
-      logDictionarySettingChanged({ key, old_value: prevSettings[key], new_value: value, reload_result: 'success' });
-    } catch (err) {
-      console.error('辞書設定の保存に失敗:', err);
-      logDictionarySettingChanged({ key, old_value: prevSettings[key], new_value: value, reload_result: 'error' });
-      // re-fetch server state to ensure UI matches actual setting
-      try {
-        const serverSettings = await getDictionarySettings();
-        setDictionarySettings(serverSettings);
-      } catch {
-        setDictionarySettings(prevSettings);
-      }
-    } finally {
-      setIsSavingDictionary(false);
+    if (isSavingConfig) return; // concurrent save 防止
+    const prevConfig = appConfig;
+    // 楽観更新: appConfig.dictionary を即時更新
+    setAppConfig(prev => prev ? { ...prev, dictionary: { ...prev.dictionary, [key]: value } } : prev);
+    const ok = await handleConfigUpdate({ [`dictionary.${key}`]: value });
+    if (ok) {
+      logDictionarySettingChanged({ key, old_value: prevConfig?.dictionary?.[key], new_value: value, reload_result: 'success' });
+    } else {
+      setAppConfig(prevConfig); // 失敗時は appConfig 全体を revert
+      logDictionarySettingChanged({ key, old_value: prevConfig?.dictionary?.[key], new_value: value, reload_result: 'error' });
     }
   };
 
@@ -117,6 +100,45 @@ function App() {
     }
   };
 
+  // ─── App config (Phase 3C: frontend 唯一の正本。初回マウントは getAppConfig() のみ) ──
+  const [appConfig, setAppConfig] = useState(null);
+  const [configStatus, setConfigStatus] = useState(null);
+  useEffect(() => {
+    // Phase 3C/3D: 旧 getOcrSettings() / getDictionarySettings() は除去済み。
+    // getAppConfig() のみで全 config を構成する。
+    getAppConfig().then(c => { setAppConfig(c); }).catch(() => {});
+    getConfigStatus().then(s => setConfigStatus(s)).catch(() => {});
+  }, []);
+
+  const [isSavingConfig, setIsSavingConfig] = useState(false);
+  const [configSaveError, setConfigSaveError] = useState(null);
+
+  /**
+   * PATCH /api/config 呼び出し → 成功後に GET /api/config で再同期（正本確定）。
+   * Phase 3C: isSavingDictionary ガード廃止。isSavingConfig のみで OCR/dictionary/status/CONFIG
+   *            すべての concurrent save を防止。
+   * 呼び出し元が楽観更新を行った場合、失敗時は呼び出し元で prevConfig を revert すること。
+   * @returns {Promise<boolean>} 保存成功なら true、ガード / エラー時は false
+   */
+  const handleConfigUpdate = async (updates) => {
+    if (isSavingConfig) return false; // Phase 3C: 統一 concurrent save ガード
+    setIsSavingConfig(true);
+    setConfigSaveError(null);
+    try {
+      await updateAppConfig(updates);
+      // 成功後に GET /api/config を再取得して appConfig を正本として再同期
+      const newConfig = await getAppConfig();
+      setAppConfig(newConfig);
+      return true;
+    } catch (err) {
+      console.error('Config保存に失敗:', err);
+      setConfigSaveError(err.message);
+      return false;
+    } finally {
+      setIsSavingConfig(false);
+    }
+  };
+
   // ─── Circular-dep bridge ─────────────────────────────────────────────────
   // useDocumentOpen needs setCurrentPage (from usePageView), but usePageView
   // needs documentData (from useDocumentOpen). A stable ref breaks the cycle:
@@ -139,7 +161,13 @@ function App() {
     reloadDocument,
     runOcr,
     runOcrPage,
-  } = useDocumentOpen({ onDocumentLoaded: () => setCurrentPageRef.current(0) });
+  } = useDocumentOpen({
+    // page: the targetPage forwarded by reloadDocument(); null means new-doc open → page 0
+    onDocumentLoaded: (data, page) => {
+      const maxPage = (data?.ocr_pages?.length ?? 1) - 1;
+      setCurrentPageRef.current(Math.min(page ?? 0, maxPage));
+    },
+  });
   // openDocumentById / openDocumentByPath are exported from the hook and available
   // for future Obsidian command / file-menu wiring — not used in App.jsx directly.
 
@@ -151,6 +179,7 @@ function App() {
     totalPages,
     imageContainerRef, pageBlockRefs,
     handleNextPage, handlePrevPage, handleSeamlessImageClick,
+    scrollToPage,
   } = usePageView(documentData, settings.display.viewMode);
 
   // viewMode 変更時に settings にも永続化する
@@ -173,6 +202,7 @@ function App() {
   });
   const [showSettings, setShowSettings] = useState(false);
   const [showFileBrowser, setShowFileBrowser] = useState(() => settings.panel.openOnStartup);
+  const [showDictManager, setShowDictManager] = useState(false);
   const [fileHistory, setFileHistory] = useState(() => {
     try {
       const saved = localStorage.getItem('ocr_file_history');
@@ -202,6 +232,149 @@ function App() {
   const importFileRef = useRef(null);
   const exportDropdownRef = useRef(null);
   const [exportDropdownOpen, setExportDropdownOpen] = useState(false);
+
+  // ─── Image zoom & pan ────────────────────────────────────────────────────
+  const [imageZoom, setImageZoom] = useState(1.0);
+  const imageZoomRef = useRef(1.0);
+  const viewModeRef = useRef(viewMode);
+  const imageWrapperRef = useRef(null);       // paged-mode only
+  const seamlessContentRef = useRef(null);    // seamless-mode content wrapper
+  const imagePanRef = useRef({ x: 0, y: 0 });
+  const isImageHoveredRef = useRef(false);
+
+  useEffect(() => { imageZoomRef.current = imageZoom; }, [imageZoom]);
+  useEffect(() => { viewModeRef.current = viewMode; }, [viewMode]);
+
+  // Reset zoom and pan on document or page change
+  useEffect(() => {
+    setImageZoom(1.0);
+    imagePanRef.current = { x: 0, y: 0 };
+    if (imageWrapperRef.current) imageWrapperRef.current.style.transform = '';
+  }, [documentData?.doc_id, currentPage]);
+
+  // On every zoom change: reset pan and apply zoom
+  useEffect(() => {
+    imagePanRef.current = { x: 0, y: 0 };
+    // Paged mode: scale transform on the single wrapper
+    if (imageWrapperRef.current) {
+      imageWrapperRef.current.style.transform =
+        imageZoom === 1.0 ? '' : `scale(${imageZoom})`;
+    }
+  }, [imageZoom]);
+
+  // Wheel zoom — non-passive to allow preventDefault
+  // Paged mode: any scroll zooms (no Ctrl required)
+  // Seamless mode: Ctrl+scroll zooms only (normal scroll navigates pages)
+  useEffect(() => {
+    const container = imageContainerRef.current;
+    if (!container) return;
+    const onWheel = (e) => {
+      if (viewModeRef.current !== 'paged' && !e.ctrlKey) return;
+      e.preventDefault();
+      const delta = e.deltaY < 0 ? 0.15 : -0.15;
+      setImageZoom(prev => Math.min(4.0, Math.max(0.3, +(prev + delta).toFixed(2))));
+    };
+    container.addEventListener('wheel', onWheel, { passive: false });
+    return () => container.removeEventListener('wheel', onWheel);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [documentData?.doc_id]);
+
+  // Left-click drag to pan:
+  //   paged mode    → transform on imageWrapperRef (DOM direct, no re-render)
+  //   seamless mode → scrollLeft/scrollTop on container
+  //   In seamless mode, the page-block onClick fires after mouseup — suppress it when dragged.
+  useEffect(() => {
+    const container = imageContainerRef.current;
+    if (!container) return;
+    let isDragging = false;
+    let hasDragged = false;
+    let startX = 0, startY = 0;
+    let origX = 0, origY = 0;
+
+    const onMouseDown = (e) => {
+      if (e.button !== 0) return;
+      // In paged mode, pan only when zoomed in
+      if (viewModeRef.current !== 'seamless' && imageZoomRef.current <= 1) return;
+      isDragging = true;
+      hasDragged = false;
+      startX = e.clientX;
+      startY = e.clientY;
+      if (viewModeRef.current === 'seamless') {
+        origX = container.scrollLeft;
+        origY = container.scrollTop;
+        // scroll-behavior: smooth conflicts with direct scrollTop assignment — disable during drag
+        container.style.scrollBehavior = 'auto';
+      } else {
+        origX = imagePanRef.current.x;
+        origY = imagePanRef.current.y;
+      }
+      container.style.cursor = 'grabbing';
+      e.preventDefault();
+    };
+    const onMouseMove = (e) => {
+      if (!isDragging) return;
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) hasDragged = true;
+      if (viewModeRef.current === 'seamless') {
+        container.scrollLeft = origX - dx;
+        container.scrollTop  = origY - dy;
+      } else {
+        const x = origX + dx;
+        const y = origY + dy;
+        imagePanRef.current = { x, y };
+        if (imageWrapperRef.current) {
+          const zoom = imageZoomRef.current;
+          imageWrapperRef.current.style.transform = `translate(${x}px, ${y}px) scale(${zoom})`;
+        }
+      }
+    };
+    const onMouseUp = (e) => {
+      if (e.button !== 0 || !isDragging) return;
+      isDragging = false;
+      container.style.cursor = 'grab';
+      if (viewModeRef.current === 'seamless') {
+        container.style.scrollBehavior = ''; // restore CSS scroll-behavior: smooth
+      }
+      if (hasDragged) {
+        window.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          ev.preventDefault();
+        }, { capture: true, once: true });
+      }
+    };
+
+    container.addEventListener('mousedown', onMouseDown);
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+    return () => {
+      container.removeEventListener('mousedown', onMouseDown);
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [documentData?.doc_id]);
+
+  // +/-/0 keyboard shortcuts when image panel is hovered
+  useEffect(() => {
+    const handler = (e) => {
+      if (!isImageHoveredRef.current) return;
+      const tag = document.activeElement?.tagName?.toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || document.activeElement?.isContentEditable) return;
+      if (e.key === '+' || e.key === '=') {
+        e.preventDefault();
+        setImageZoom(prev => Math.min(4.0, +(prev + 0.2).toFixed(2)));
+      } else if (e.key === '-') {
+        e.preventDefault();
+        setImageZoom(prev => Math.max(0.3, +(prev - 0.2).toFixed(2)));
+      } else if (e.key === '0') {
+        e.preventDefault();
+        setImageZoom(1.0);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
 
   // ─── Page jump ───────────────────────────────────────────────────────────
   const [pageInputValue, setPageInputValue] = useState('1');
@@ -280,6 +453,14 @@ function App() {
     });
   };
 
+  // ─── Page restore after reload ───────────────────────────────────────────
+  // Call after every reloadDocument()+setCurrentPage() to ensure seamless mode
+  // also scrolls to the correct page before the IntersectionObserver fires.
+  const restorePageAfterReload = (page) => {
+    setCurrentPage(page);
+    scrollToPage(page); // sets isUserScrolling=false, suppresses Observer during scroll
+  };
+
   // ─── Toast helper ────────────────────────────────────────────────────────
   const showToast = (msg) => {
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
@@ -296,9 +477,11 @@ function App() {
       `このドキュメントの completion status を ${targetValue} に設定します。\n` +
       `(property: "${propName}")\n\n続行しますか？`
     )) return;
+    const pageToRestore = currentPage;
     try {
       await updateDocumentStatus(docId, propName, targetValue);
-      await reloadDocument();
+      await reloadDocument(pageToRestore);
+      restorePageAfterReload(pageToRestore);
       showToast(`Document status → ${targetValue}`);
     } catch (err) {
       alert('ステータス更新エラー: ' + err.message);
@@ -318,7 +501,9 @@ function App() {
       await updateDocumentStatus(docId, propName, value);
       showToast(`status → ${value}`);
     } catch (err) {
-      await reloadDocument();
+      const pageToRestore = currentPage;
+      await reloadDocument(pageToRestore);
+      restorePageAfterReload(pageToRestore);
       alert('ステータス更新エラー: ' + err.message);
     }
   };
@@ -327,6 +512,7 @@ function App() {
   const handleSave = async () => {
     if (!documentData) return;
     const savedPageCount = Object.keys(pageEdits).length;
+    const pageToRestore = currentPage;
     try {
       if (savedPageCount > 0) {
         for (const [pageNum, editedText] of Object.entries(pageEdits)) {
@@ -351,7 +537,8 @@ function App() {
         });
       }
       setPageEdits({});
-      await reloadDocument();
+      await reloadDocument(pageToRestore);
+      restorePageAfterReload(pageToRestore);
       showToast(savedPageCount > 0 ? `保存完了 — OCR ${savedPageCount}p + Markdown` : '保存完了 — Markdown');
     } catch (err) {
       console.error('Save error:', err);
@@ -433,9 +620,11 @@ function App() {
     if (!hasIndexedImages || !hasAnyOcrText) {
       // 初回文書またはOCR未実行: 一括OCR（リネーム含む）にフォールバック
       setOcrBulkState({ isRunning: true, isComplete: false, done: 0, total: 0, failed: [], isInitialFallback: true });
+      const pageToRestore = currentPage;
       try {
         await apiRunOcrForDocument(id, { statusPropertyName: settings.document.statusPropertyName });
-        await reloadDocument();
+        await reloadDocument(pageToRestore);
+        restorePageAfterReload(pageToRestore);
       } catch (err) {
         console.error('Bulk OCR (initial fallback) failed:', err);
       }
@@ -466,7 +655,8 @@ function App() {
       setOcrBulkState(prev => ({ ...prev, done: prev.done + 1 }));
     }
 
-    await reloadDocument();
+    await reloadDocument(currentPage);
+    restorePageAfterReload(currentPage);
 
     setOcrBulkState(prev => ({ ...prev, isRunning: false, isComplete: true, failed: newFailed }));
     ocrBulkTimerRef.current = setTimeout(() => {
@@ -597,6 +787,11 @@ function App() {
               }}
               title="ファイル一覧 (Vault Files)"
             >📂</button>
+            <button
+              className={`btn-icon ${showDictManager ? 'active' : ''}`}
+              onClick={() => setShowDictManager(v => !v)}
+              title="辞書管理"
+            >📖</button>
             <button
               className={`btn-icon ${showSettings ? 'active' : ''}`}
               onClick={() => setShowSettings(!showSettings)}
@@ -768,18 +963,24 @@ function App() {
             onExportCsv={() => { handleExportCsv(); setShowSettings(false); }}
             onExportJson={() => { handleExportJson(); setShowSettings(false); }}
             onFlushEvents={flushToBackend}
-            ocrSettings={ocrSettings}
             onOcrSettingChange={handleOcrSettingChange}
-            dictionarySettings={dictionarySettings}
             onDictionarySettingChange={handleDictionarySettingChange}
-            isSavingDictionary={isSavingDictionary}
             temporaryTerms={temporaryTerms}
             isLoadingTempDict={isLoadingTempDict}
             tempDictError={tempDictError}
             onRegisterTemporaryTerm={handleRegisterTemporaryTerm}
             onToggleTemporaryTerm={handleToggleTemporaryTerm}
+            appConfig={appConfig}
+            configStatus={configStatus}
+            onConfigUpdate={handleConfigUpdate}
+            isSavingConfig={isSavingConfig}
+            configSaveError={configSaveError}
             onClose={() => setShowSettings(false)}
           />
+        )}
+
+        {showDictManager && (
+          <DictionaryManager onClose={() => setShowDictManager(false)} />
         )}
 
         {showFileBrowser && (
@@ -802,10 +1003,10 @@ function App() {
           />
         )}
 
-        {loading && <div className="loading">読み込み中...</div>}
+        {loading && !documentData && <div className="loading">読み込み中...</div>}
         {error && <div className="error-msg">{error}</div>}
 
-        {documentData && !loading && (
+        {documentData && (
           <>
             <div className="panel image-panel" style={{ width: `${splitRatio}%` }}>
               <div className="panel-header">
@@ -813,43 +1014,80 @@ function App() {
                 {totalPages > 0 && (
                   <span className="page-info">{currentPage + 1} / {totalPages} ページ</span>
                 )}
+                {imageZoom !== 1.0 && (
+                  <button
+                    className="zoom-reset-btn"
+                    onClick={() => setImageZoom(1.0)}
+                    title="ズームリセット (0)"
+                  >{Math.round(imageZoom * 100)}%</button>
+                )}
               </div>
               <div
                 ref={imageContainerRef}
                 className={`panel-content image-container ${viewMode === 'seamless' ? 'seamless-scroll' : ''}`}
+                style={viewMode === 'paged'
+                  ? { overflow: 'hidden', cursor: imageZoom > 1 ? 'grab' : 'default', userSelect: 'none' }
+                  : { cursor: 'grab', userSelect: 'none' }}
+                onContextMenu={(e) => e.preventDefault()}
+                onMouseEnter={() => { isImageHoveredRef.current = true; }}
+                onMouseLeave={() => { isImageHoveredRef.current = false; }}
               >
                 {viewMode === 'paged' ? (
                   currentImagePath
-                    ? <img src={getImageUrl(currentImagePath)} alt={`Page ${currentPage + 1}`} />
+                    ? (
+                      <div
+                        ref={imageWrapperRef}
+                        className="image-zoom-wrapper image-fit"
+                        style={{ width: '100%', height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center' }}
+                        onDoubleClick={() => setImageZoom(prev => prev === 1.0 ? 2.0 : 1.0)}
+                      >
+                        <img src={getImageUrl(currentImagePath)} alt={`Page ${currentPage + 1}`} draggable="false" />
+                      </div>
+                    )
                     : <div className="placeholder-msg">No image found</div>
                 ) : (
-                  documentData.ocr_pages && documentData.ocr_pages.length > 0
-                    ? documentData.ocr_pages.map((page, idx) => (
-                      <div
-                        key={idx}
-                        className={`seamless-page-block ${idx === currentPage ? 'seamless-active' : ''}`}
-                        data-page-idx={idx}
-                        ref={el => pageBlockRefs.current[idx] = el}
-                        onClick={() => handleSeamlessImageClick(idx)}
-                      >
-                        <div className="seamless-page-label">── Page {idx + 1} ──</div>
-                        {page.image_path
-                          ? <img src={getImageUrl(page.image_path)} alt={`Page ${idx + 1}`} />
-                          : <div className="placeholder-msg">No image</div>}
-                      </div>
-                    ))
-                    : (documentData.image_paths || []).map((path, idx) => (
-                      <div
-                        key={idx}
-                        className={`seamless-page-block ${idx === currentPage ? 'seamless-active' : ''}`}
-                        data-page-idx={idx}
-                        ref={el => pageBlockRefs.current[idx] = el}
-                        onClick={() => handleSeamlessImageClick(idx)}
-                      >
-                        <div className="seamless-page-label">── Page {idx + 1} ──</div>
-                        <img src={getImageUrl(path)} alt={`Page ${idx + 1}`} />
-                      </div>
-                    ))
+                  <div ref={seamlessContentRef} style={{ width: '100%' }}>
+                    {documentData.ocr_pages && documentData.ocr_pages.length > 0
+                      ? documentData.ocr_pages.map((page, idx) => (
+                        <div
+                          key={idx}
+                          className={`seamless-page-block ${idx === currentPage ? 'seamless-active' : ''}`}
+                          data-page-idx={idx}
+                          ref={el => pageBlockRefs.current[idx] = el}
+                          onClick={() => handleSeamlessImageClick(idx)}
+                        >
+                          <div className="seamless-page-label">── Page {idx + 1} ──</div>
+                          {page.image_path
+                            ? (
+                              <div
+                                className={`image-zoom-wrapper${imageZoom === 1.0 ? ' image-fit-width' : ''}`}
+                                style={{ width: imageZoom === 1.0 ? '100%' : `${imageZoom * 100}%` }}
+                              >
+                                <img src={getImageUrl(page.image_path)} alt={`Page ${idx + 1}`} draggable="false" />
+                              </div>
+                            )
+                            : <div className="placeholder-msg">No image</div>}
+                        </div>
+                      ))
+                      : (documentData.image_paths || []).map((path, idx) => (
+                        <div
+                          key={idx}
+                          className={`seamless-page-block ${idx === currentPage ? 'seamless-active' : ''}`}
+                          data-page-idx={idx}
+                          ref={el => pageBlockRefs.current[idx] = el}
+                          onClick={() => handleSeamlessImageClick(idx)}
+                        >
+                          <div className="seamless-page-label">── Page {idx + 1} ──</div>
+                          <div
+                            className={`image-zoom-wrapper${imageZoom === 1.0 ? ' image-fit-width' : ''}`}
+                            style={{ width: imageZoom === 1.0 ? '100%' : `${imageZoom * 100}%` }}
+                          >
+                            <img src={getImageUrl(path)} alt={`Page ${idx + 1}`} draggable="false" />
+                          </div>
+                        </div>
+                      ))
+                    }
+                  </div>
                 )}
               </div>
               {viewMode === 'paged' && totalPages > 1 && (

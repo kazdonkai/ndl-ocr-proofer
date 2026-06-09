@@ -135,6 +135,17 @@
   pointer-events: none;
 }
 
+/* 改行可視化マーク ¶ — highlight-layer 内にインライン描画
+   margin-right: -0.6em で ¶ の文字幅(≈0.6em)を相殺しレイアウトずれを最小化
+   pointer-events: none でドラッグ選択を一切妨げない */
+.newline-mark {
+  pointer-events: none;
+  user-select: none;
+  color: rgba(160, 160, 230, 0.88);
+  font-size: 0.78em;
+  margin-right: -0.6em;
+}
+
 /* 背面：エディタ層（キーボード入力・カーソルはこちらが受け取る） */
 .text-editor-integrated {
   z-index: 1;

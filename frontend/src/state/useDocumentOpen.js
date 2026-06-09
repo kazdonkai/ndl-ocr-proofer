@@ -36,7 +36,9 @@ export function useDocumentOpen({ onDocumentLoaded } = {}) {
   }, []);
 
   // ─── Internal fetch (shared by open and reload) ──────────────────────────
-  const _fetch = useCallback(async (id) => {
+  // targetPage: if non-null, forwarded to onDocumentLoaded so the caller can
+  // restore a specific page after reload without a shared mutable ref.
+  const _fetch = useCallback(async (id, targetPage = null) => {
     setLoading(true);
     setError(null);
     setDocumentData(null);
@@ -45,7 +47,7 @@ export function useDocumentOpen({ onDocumentLoaded } = {}) {
     try {
       const data = await fetchDocument(id);
       setDocumentData(data);
-      onDocumentLoadedRef.current?.(data);
+      onDocumentLoadedRef.current?.(data, targetPage);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -72,13 +74,28 @@ export function useDocumentOpen({ onDocumentLoaded } = {}) {
   const openDocumentByPath = useCallback((path) => openDocument({ type: 'path', value: path }), [openDocument]);
 
   // ─── Reload (after save / OCR) ───────────────────────────────────────────
-  // Does NOT reset docId; re-fetches the currently open document.
-  // pageEdits are cleared inside _fetch (they have been persisted by handleSave).
-  const reloadDocument = useCallback(async () => {
+  // Does NOT reset docId, does NOT null documentData, does NOT set loading.
+  // Keeping panels mounted preserves scrollTop in seamless mode so the
+  // IntersectionObserver cannot fire page-0 on a panel remount.
+  // Using a ref (reassigned every render) bypasses useCallback HMR stale-closure.
+  const _reloadRef = useRef(null);
+  _reloadRef.current = async (targetPage = null) => {
     const id = docIdRef.current;
     if (!id) return;
-    return _fetch(id);
-  }, [_fetch]);
+    setPageEdits({});
+    setPageCorrections({});
+    try {
+      const data = await fetchDocument(id);
+      setDocumentData(data);
+      onDocumentLoadedRef.current?.(data, targetPage);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+  const reloadDocument = useCallback((targetPage = null) => {
+    return _reloadRef.current(targetPage);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ─── OCR ─────────────────────────────────────────────────────────────────
   const runOcr = useCallback(async () => {
