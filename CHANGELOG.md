@@ -8,6 +8,14 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [1.1.2] — 2026-06-13
+
+### Fixed / 修正
+
+- **修正③ FM WikiLink heading anchor stripping** (`frontmatter_extractor.py`): `[[近世法制史#検地]]` のように Frontmatter 値に `#見出し` 形式の anchor を含む WikiLink が、`近世法制史#検地` のままトークン化されていた問題を修正。`_strip_wikilinks` で `#` 以降を除去し、`近世法制史` のみを返すようにした。`[[page#anchor|display]]` は既存の display text 優先ロジックで正しく処理される。
+
+---
+
 ## [1.1.0] — 2026-06-09
 
 ### Summary / 概要
