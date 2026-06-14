@@ -8,6 +8,7 @@ from typing import Any
 from dotenv import load_dotenv
 from fastapi import Body, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from urllib.parse import unquote
 import uvicorn
@@ -957,6 +958,42 @@ async def rescan_files():
 
 # 画像配信用の静的ファイル設定
 app.mount("/images", StaticFiles(directory=VAULT_ROOT, follow_symlink=True), name="images")
+
+# ── production フロントエンド配信 ──────────────────────────────────────────────
+# SERVE_FRONTEND=true のときのみ有効（start.sh --prod から渡される）
+# 開発時（npm run dev）は Vite の proxy が担うため、この処理は不要
+_SERVE_FRONTEND = os.getenv("SERVE_FRONTEND", "false").lower() == "true"
+
+if _SERVE_FRONTEND:
+    _dist = Path(__file__).parent.parent / "frontend" / "dist"
+
+    if not (_dist / "index.html").exists():
+        raise RuntimeError(
+            f"[PROD] frontend ビルドが見つかりません: {_dist / 'index.html'}\n"
+            "先に frontend/ で npm run build を実行してください。"
+        )
+
+    # /assets/ ディレクトリを静的配信
+    if (_dist / "assets").exists():
+        app.mount("/assets", StaticFiles(directory=str(_dist / "assets")), name="fe_assets")
+
+    # dist ルート直下の静的ファイル（index.html 除く）を列挙
+    _dist_root_files = {
+        f for f in os.listdir(str(_dist))
+        if (_dist / f).is_file() and f != "index.html"
+    }
+
+    # /api/*, /docs, /openapi.json, /redoc は上流ルートで処理されるが、
+    # 万一ここに到達した場合も SPA に飲み込ませず 404 を返す
+    _API_PREFIXES = ("api/", "docs", "openapi.json", "redoc")
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def _serve_spa(full_path: str = ""):
+        if any(full_path.startswith(p) for p in _API_PREFIXES):
+            raise HTTPException(status_code=404, detail="Not Found")
+        if full_path in _dist_root_files:
+            return FileResponse(str(_dist / full_path))
+        return FileResponse(str(_dist / "index.html"))
 
 if __name__ == "__main__":
     _host = os.getenv("BACKEND_HOST", "127.0.0.1")

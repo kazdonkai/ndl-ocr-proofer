@@ -2,7 +2,13 @@
 # ============================================================
 #  start.sh — proofreading-app 起動スクリプト
 #  使い方:
-#    ./start.sh          # バックエンド + フロントエンドを同時起動
+#    ./start.sh          # バックエンド + フロントエンドを同時起動（開発モード）
+#                        #   backend: uvicorn --reload  port 8000
+#                        #   frontend: Vite dev server  port 5176
+#    ./start.sh --prod   # production モード起動
+#                        #   frontend を npm run build でビルドし、
+#                        #   FastAPI（port 8000）から静的配信する。
+#                        #   Vite dev server は起動しない。
 #    ./start.sh --stop   # 起動中のプロセスを停止
 #    ./start.sh --status # 起動状態を確認
 # ============================================================
@@ -19,6 +25,7 @@ FRONTEND_PORT=5176
 BACKEND_LOG="$SCRIPT_DIR/logs/backend.log"
 FRONTEND_LOG="$SCRIPT_DIR/logs/frontend.log"
 PID_FILE="$SCRIPT_DIR/logs/app.pid"
+MODE_FILE="$SCRIPT_DIR/logs/app.mode"
 
 # ── カラー出力 ────────────────────────────────────────────────
 GREEN='\033[0;32m'
@@ -46,13 +53,18 @@ port_in_use() { lsof -ti :"$1" >/dev/null 2>&1; }
 # ── --status ─────────────────────────────────────────────────
 cmd_status() {
   echo ""
+  local mode=""
+  [[ -f "$MODE_FILE" ]] && mode=$(cat "$MODE_FILE")
+
   if port_in_use "$BACKEND_PORT"; then
     log_info "バックエンド  : 起動中 (port $BACKEND_PORT)"
   else
     log_warn "バックエンド  : 停止中"
   fi
 
-  if port_in_use "$FRONTEND_PORT"; then
+  if [[ "$mode" == "prod" ]]; then
+    log_info "フロントエンド: dev server 未使用 (prod mode) → http://localhost:$BACKEND_PORT"
+  elif port_in_use "$FRONTEND_PORT"; then
     log_info "フロントエンド: 起動中 → http://localhost:$FRONTEND_PORT"
   else
     log_warn "フロントエンド: 停止中"
@@ -92,6 +104,7 @@ cmd_start() {
   # logs ディレクトリ作成
   mkdir -p "$SCRIPT_DIR/logs"
   > "$PID_FILE"
+  echo "dev" > "$MODE_FILE"
 
   echo ""
   log_step "proofreading-app を起動します"
@@ -163,9 +176,75 @@ cmd_start() {
   echo ""
 }
 
+# ── production 起動 ──────────────────────────────────────────
+cmd_prod() {
+  check_deps
+
+  mkdir -p "$SCRIPT_DIR/logs"
+  > "$PID_FILE"
+  echo "prod" > "$MODE_FILE"
+
+  echo ""
+  log_step "proofreading-app を production モードで起動します"
+  echo "  プロジェクト : $SCRIPT_DIR"
+  echo ""
+
+  # ── フロントエンドビルド ──────────────────────────────────
+  log_step "フロントエンドをビルド中… (npm run build)"
+  if ! (cd "$FRONTEND_DIR" && npm run build >> "$FRONTEND_LOG" 2>&1); then
+    log_error "npm run build に失敗しました"
+    log_error "ログを確認してください: $FRONTEND_LOG"
+    exit 1
+  fi
+
+  if [[ ! -f "$FRONTEND_DIR/dist/index.html" ]]; then
+    log_error "frontend/dist/index.html が見つかりません。ビルドが正常に完了しなかった可能性があります。"
+    log_error "ログを確認してください: $FRONTEND_LOG"
+    exit 1
+  fi
+  log_info "ビルド完了 → frontend/dist/"
+
+  # ── バックエンド（production モード） ─────────────────────
+  if port_in_use "$BACKEND_PORT"; then
+    log_warn "バックエンド port $BACKEND_PORT はすでに使用中です（スキップ）"
+  else
+    log_step "バックエンド起動中… (production, --reload なし, port $BACKEND_PORT)"
+    (
+      cd "$BACKEND_DIR"
+      SERVE_FRONTEND=true python3 -m uvicorn main:app \
+        --host 127.0.0.1 --port "$BACKEND_PORT" >> "$BACKEND_LOG" 2>&1
+    ) &
+    BACKEND_PID=$!
+    echo "$BACKEND_PID" >> "$PID_FILE"
+
+    local attempts=0
+    while ! port_in_use "$BACKEND_PORT"; do
+      sleep 0.5
+      attempts=$((attempts + 1))
+      if [[ $attempts -ge 20 ]]; then
+        log_error "バックエンドの起動がタイムアウトしました"
+        log_error "ログを確認してください: $BACKEND_LOG"
+        exit 1
+      fi
+    done
+    log_info "バックエンド起動完了 (PID $BACKEND_PID)"
+  fi
+
+  # ── 完了メッセージ ────────────────────────────────────────
+  echo ""
+  echo -e "  ${GREEN}✓ production 起動完了${NC}"
+  echo -e "  アプリ URL  : ${CYAN}http://localhost:$BACKEND_PORT${NC}"
+  echo -e "  API URL     : http://localhost:$BACKEND_PORT/api"
+  echo -e "  ログ        : $SCRIPT_DIR/logs/"
+  echo ""
+  echo -e "  停止するには: ${YELLOW}./start.sh --stop${NC}"
+  echo ""
+}
+
 # ── メイン ───────────────────────────────────────────────────
 case "${1:-}" in
   --stop)   cmd_stop   ;;
   --status) cmd_status ;;
+  --prod)   cmd_prod   ;;
   *)        cmd_start  ;;
 esac
