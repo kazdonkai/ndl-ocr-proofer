@@ -180,6 +180,42 @@
   outline-offset: 1px;
 }
 
+/* ② ノイズ（OCR信頼度低・記号連続・繰り返し） */
+.highlight-span.highlight-noise {
+  background-color: rgba(148, 163, 184, 0.15);
+  border-bottom: 2px solid #94a3b8;
+}
+
+.highlight-span.highlight-noise:hover {
+  background-color: rgba(148, 163, 184, 0.30);
+}
+
+.highlight-span.highlight-noise.highlight-active {
+  background-color: rgba(148, 163, 184, 0.45);
+  border-bottom: 2px solid #94a3b8;
+  box-shadow: 0 0 0 3px rgba(148, 163, 184, 0.5);
+  outline: 2px solid #cbd5e1;
+  outline-offset: 1px;
+}
+
+/* ③ ファイル由来（フロントマター・本文確認） */
+.highlight-span.highlight-file {
+  background-color: rgba(163, 230, 53, 0.18);
+  border-bottom: 2px solid #a3e635;
+}
+
+.highlight-span.highlight-file:hover {
+  background-color: rgba(163, 230, 53, 0.32);
+}
+
+.highlight-span.highlight-file.highlight-active {
+  background-color: rgba(163, 230, 53, 0.45);
+  border-bottom: 2px solid #a3e635;
+  box-shadow: 0 0 0 3px rgba(163, 230, 53, 0.5);
+  outline: 2px solid #d9f99d;
+  outline-offset: 1px;
+}
+
 .highlight-span.highlight-protected {
   background-color: rgba(74, 222, 128, 0.55);
   border-bottom-style: dotted;
@@ -442,6 +478,32 @@
   background: rgba(180, 140, 60, 0.18);
   color: #c8a84b;
   border: 1px solid rgba(180, 140, 60, 0.35);
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.tag-frontmatter-hint {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 5px;
+  font-size: 0.7rem;
+  border-radius: 3px;
+  background: rgba(163, 230, 53, 0.15);
+  color: #a3e635;
+  border: 1px solid rgba(163, 230, 53, 0.35);
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.tag-body-hint {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 5px;
+  font-size: 0.7rem;
+  border-radius: 3px;
+  background: rgba(163, 230, 53, 0.15);
+  color: #a3e635;
+  border: 1px solid rgba(163, 230, 53, 0.35);
   vertical-align: middle;
   white-space: nowrap;
 }
@@ -975,6 +1037,9 @@
   max-width: 60px;
   flex-shrink: 0;
 }
+
+.crp-suspect--file  { color: #a3e635; }
+.crp-suspect--noise { color: #94a3b8; }
 
 .crp-arrow {
   font-size: 0.72rem;
