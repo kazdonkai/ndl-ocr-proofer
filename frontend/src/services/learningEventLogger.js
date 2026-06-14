@@ -54,18 +54,22 @@ export function logParticleNormApplied({ docId, docType, matchCount }) {
 // popoverOpenMs: duration popover was open (ms); dismissTrigger: what caused close;
 // candidatesViewed: number of candidates displayed in the popover
 // rank1FromExperimental: rank1 candidate came from experimental (staging/) dict tier; null → omit
-export function logSpanSkipped({ docId, spanId, suspectSpan, isDangerous, popoverOpenMs, dismissTrigger, candidatesViewed, rank1FromExperimental }) {
+// rank1FromFrontmatter: rank1 candidate was boosted by a frontmatter token; null → omit
+export function logSpanSkipped({ docId, spanId, suspectSpan, isDangerous, popoverOpenMs, dismissTrigger, candidatesViewed, rank1FromExperimental, rank1FromFrontmatter }) {
   const payload = { event: 'span_skipped', docId, spanId, suspectSpan, isDangerous, popoverOpenMs, dismissTrigger, candidatesViewed };
   if (rank1FromExperimental != null) payload.rank1FromExperimental = rank1FromExperimental;
+  if (rank1FromFrontmatter != null) payload.rank1FromFrontmatter = rank1FromFrontmatter;
   _append(payload);
 }
 
 // Tier 2 — top1 candidate rejection (user explicitly rejected the top-ranked candidate)
 // reject_target is always "top1" in the initial version; tier is reserved for semi-mode (nullable)
 // rank1FromExperimental: rank1 candidate came from experimental (staging/) dict tier; null → omit
-export function logSpanRejected({ docId, spanId, suspectSpan, isDangerous, rejectedCandidate, tier, rank1FromExperimental }) {
+// rank1FromFrontmatter: rank1 candidate was boosted by a frontmatter token; null → omit
+export function logSpanRejected({ docId, spanId, suspectSpan, isDangerous, rejectedCandidate, tier, rank1FromExperimental, rank1FromFrontmatter }) {
   const payload = { event: 'span_rejected', docId, spanId, suspectSpan, isDangerous, reject_target: 'top1', rejected_candidate: rejectedCandidate, tier: tier ?? null };
   if (rank1FromExperimental != null) payload.rank1FromExperimental = rank1FromExperimental;
+  if (rank1FromFrontmatter != null) payload.rank1FromFrontmatter = rank1FromFrontmatter;
   _append(payload);
 }
 
@@ -78,9 +82,10 @@ export function logSpanRejected({ docId, spanId, suspectSpan, isDangerous, rejec
 //   candidateRank          — 0-indexed position of chosenCandidate in candidateList; -1 if manual input
 //   hintSource             — populated when chosenCandidate is a soft hint (e.g. "manual_override_seed")
 //   rank1FromExperimental  — rank1 candidate came from experimental (staging/) dict tier; null → omit
+//   rank1FromFrontmatter   — rank1 candidate was boosted by a frontmatter token; null → omit
 export function logSpanAccepted({
   docId, spanId, suspectSpan, chosenCandidate, candidateList,
-  wasBigramSuspect, particleScript, dismissedDangerFlag, candidateRank, hintSource, rank1FromExperimental,
+  wasBigramSuspect, particleScript, dismissedDangerFlag, candidateRank, hintSource, rank1FromExperimental, rank1FromFrontmatter,
 }) {
   const payload = {
     event: 'span_accepted',
@@ -96,6 +101,7 @@ export function logSpanAccepted({
   };
   if (hintSource != null) payload.hintSource = hintSource;
   if (rank1FromExperimental != null) payload.rank1FromExperimental = rank1FromExperimental;
+  if (rank1FromFrontmatter != null) payload.rank1FromFrontmatter = rank1FromFrontmatter;
   _append(payload);
 }
 
