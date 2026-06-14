@@ -9,8 +9,12 @@
 
 import os
 import re
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
+
+from frontmatter_extractor import FrontmatterExtractor
+from body_extractor import BodyExtractor
 
 # ── Bonus tiers ────────────────────────────────────────────────────────────────
 
@@ -109,6 +113,39 @@ _REGION_FILE_KEY: dict[str, str] = {
 
 _SPLIT_RE = re.compile(r'[_\-\s　・]+')
 
+# bonus applied to tokens extracted from frontmatter (generic fields).
+# Additive-only: FM tokens boost existing dict/shape candidates but do NOT generate
+# bonus-only candidates. CandidateEngine restricts bonus-only to proper_noun_terms only.
+# 26.0 > 25.0 (STANDALONE_BONUS_MAX) so FM boosts still beat proper_noun caps in tie-breaks
+# when both point to the same existing candidate.
+_BONUS_FRONTMATTER_TOKEN = 26.0
+# body bonus: 加点専用。FM 同様 bonus-only 候補は生成しない（CandidateEngine 側で制御）。
+_BONUS_BODY_TOKEN = 15.0
+
+
+# ── BuildResult ────────────────────────────────────────────────────────────────
+
+@dataclass
+class BuildResult:
+    """Return value of FileContextHintBuilder.build().
+
+    hints             — {term: bonus_score} additive bonus dict for CandidateEngine
+    proper_noun_terms — terms originating from proper_nouns yaml
+    region_info       — {"region": str, "region_multiplier": float}
+    geo_noun_terms    — proper_noun_terms subset from prefectures/regional yaml
+    hint_sources      — {token: [source_str, ...]} for traceability
+                        source format: "frontmatter:<key>" | "filename" | "region_alias"
+    """
+    hints: dict[str, float] = field(default_factory=dict)
+    proper_noun_terms: set[str] = field(default_factory=set)
+    region_info: dict = field(default_factory=dict)
+    geo_noun_terms: set[str] = field(default_factory=set)
+    hint_sources: dict[str, list[str]] = field(default_factory=dict)
+
+
+_fm_extractor = FrontmatterExtractor()
+_body_extractor = BodyExtractor()
+
 
 # ── Builder ────────────────────────────────────────────────────────────────────
 
@@ -133,18 +170,21 @@ class FileContextHintBuilder:
         # backward compat: ignored if dict_dir is provided
         proper_nouns_path: Optional[str] = None,
         body_text: str = "",
-    ) -> "tuple[dict[str, float], set[str], dict, set[str]]":
+        raw_markdown: str = "",  # Phase 2: full markdown for body token extraction
+    ) -> BuildResult:
         """
-        Returns:
+        Returns a BuildResult with:
           hints             — {term: bonus_score} additive bonus dict
           proper_noun_terms — set of terms that came from proper_nouns yaml
           region_info       — {"region": str, "region_multiplier": float}
           geo_noun_terms    — subset of proper_noun_terms from prefectures + regional yaml
                               (NOT from core.yaml). Used to suppress noisy 2-char geo aliases.
+          hint_sources      — {token: [source_str, ...]} for traceability
         """
         hints: dict[str, float] = {}
         proper_noun_terms: set[str] = set()
         geo_noun_terms: set[str] = set()
+        hint_sources: dict[str, list[str]] = {}
         fm = frontmatter or {}
 
         # ── 2. Region — normalize alias/旧国名 → 都道府県正規名 ───────────────
@@ -220,8 +260,41 @@ class FileContextHintBuilder:
                 hints[term] = hints.get(term, 0.0) + score
                 proper_noun_terms.add(term)
 
+        # ── 4. Generic frontmatter token bonus ────────────────────────────────
+        # FrontmatterExtractor iterates all FM fields (not just known keys) and
+        # returns {token: [source_str, ...]} after filtering noise.
+        # Each extracted token gets a flat +25.0 bonus (STANDALONE_BONUS_MAX).
+        # hint_sources is populated for traceability (rank1_from_frontmatter flag).
+        fm_sources = _fm_extractor.extract(fm)
+        for token, sources in fm_sources.items():
+            hints[token] = hints.get(token, 0.0) + _BONUS_FRONTMATTER_TOKEN
+            if token not in hint_sources:
+                hint_sources[token] = []
+            for src in sources:
+                if src not in hint_sources[token]:
+                    hint_sources[token].append(src)
+
+        # ── 5. Body text token bonus (Phase 2) ────────────────────────────────
+        # raw_markdown から OCR callout を除いた本文語を抽出し、加点専用ボーナスを付与。
+        # _BONUS_BODY_TOKEN (15.0) < 20.0 なので bonus-only 候補は生成されない（加点のみ）。
+        if raw_markdown:
+            body_sources = _body_extractor.extract(raw_markdown)
+            for token, sources in body_sources.items():
+                hints[token] = hints.get(token, 0.0) + _BONUS_BODY_TOKEN
+                if token not in hint_sources:
+                    hint_sources[token] = []
+                for src in sources:
+                    if src not in hint_sources[token]:
+                        hint_sources[token].append(src)
+
         region_info = {"region": region, "region_multiplier": region_multiplier}
-        return hints, proper_noun_terms, region_info, geo_noun_terms
+        return BuildResult(
+            hints=hints,
+            proper_noun_terms=proper_noun_terms,
+            region_info=region_info,
+            geo_noun_terms=geo_noun_terms,
+            hint_sources=hint_sources,
+        )
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 

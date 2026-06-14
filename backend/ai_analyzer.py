@@ -99,7 +99,8 @@ class AIAnalyzer:
                             "suspect_span": text,
                             "reason": f"OCR信頼度が低い ({score:.2f})",
                             "confidence": score,
-                            "is_protected": is_protected
+                            "is_protected": is_protected,
+                            "span_category": "noise",
                         })
                 for v in node.values():
                     extract_chars(v)
@@ -127,7 +128,8 @@ class AIAnalyzer:
                 "suspect_span": match.group(),
                 "reason": "記号の不自然な連続",
                 "confidence": 0.5,
-                "is_protected": False
+                "is_protected": False,
+                "span_category": "noise",
             })
             
         # 2. 括弧の閉じ忘れ等の簡易チェック (簡易的なため誤検知注意)
@@ -141,7 +143,8 @@ class AIAnalyzer:
                 "suspect_span": match.group(2),
                 "reason": "不自然な英数字の混入",
                 "confidence": 0.4,
-                "is_protected": False
+                "is_protected": False,
+                "span_category": "noise",
             })
 
         return results
@@ -240,6 +243,7 @@ class AIAnalyzer:
                 'confidence': 0.85,
                 'is_protected': False,
                 '_direct_candidates': [''],
+                'span_category': 'noise',
             })
             covered_ranges.append((span_start, span_end))
 
@@ -255,6 +259,7 @@ class AIAnalyzer:
                 'confidence': 0.85,
                 'is_protected': False,
                 '_direct_candidates': [''],
+                'span_category': 'noise',
             })
 
         return results
@@ -265,6 +270,112 @@ class AIAnalyzer:
         OCRスコアが高くても文脈破綻している「もっともらしい誤読」を拾う。
         """
         return []
+
+    # FM フィールドのうち人物・当事者系（確認スパンを生成する対象）
+    _FM_VALIDATION_KEYS: frozenset = frozenset({'plaintiff', 'defendant', 'judge'})
+
+    def detect_fm_context_terms(
+        self,
+        clean_text: str,
+        hint_sources: Dict[str, List[str]],
+    ) -> List[Dict[str, Any]]:
+        """
+        FM 登録の当事者名（plaintiff/defendant/judge）を OCR テキスト内で探し、
+        確認用疑義スパンを返す（rank1 = スパン自身 → 適正として表示）。
+
+        - 連続一致: clean_text に直接見つかる → suspect_span = token
+        - 改行またぎ: 改行除去テキストで見つかる → suspect_span = token_with_newline
+        """
+        results: List[Dict[str, Any]] = []
+        seen: set = set()
+        clean_joined = clean_text.replace('\n', '')
+
+        for token, sources in hint_sources.items():
+            if not any(
+                s.startswith('frontmatter:') and s.split(':', 1)[1] in self._FM_VALIDATION_KEYS
+                for s in sources
+            ):
+                continue
+            if len(token) < 4:
+                continue
+
+            if token in clean_text:
+                if token not in seen:
+                    results.append({
+                        'suspect_span': token,
+                        'reason': 'フロントマター登録語（確認）',
+                        'confidence': 1.0,
+                        'is_protected': False,
+                        'span_category': 'file',
+                    })
+                    seen.add(token)
+            elif token in clean_joined:
+                nl_span = self._find_span_with_newlines(token, clean_text, clean_joined)
+                if nl_span and nl_span not in seen:
+                    # \n を含む span をそのまま suspect_span にすると highlight 要素内に
+                    # 改行が入り、highlight-layer とテキストエリアの高さが食い違ってスクロール
+                    # 時にハイライト位置がズレる。\n より前のプレフィックスのみを
+                    # suspect_span として登録し、候補は clean form（改行なし）で表示する。
+                    prefix = nl_span.split('\n', 1)[0]
+                    seen.add(nl_span)
+                    if not prefix:
+                        continue
+                    results.append({
+                        'suspect_span': prefix,
+                        'reason': 'フロントマター登録語（改行またぎ・確認）',
+                        'confidence': 1.0,
+                        'is_protected': False,
+                        '_direct_candidates': [token],
+                        '_validation_result': ValidationResult(
+                            verdict='accept', score=1.0,
+                            reason='フロントマター登録語（改行またぎ）',
+                        ),
+                        'span_category': 'file',
+                    })
+
+        return results
+
+    @staticmethod
+    def _find_span_with_newlines(term: str, clean_text: str, clean_joined: str) -> str:
+        """
+        clean_joined（改行除去テキスト）で見つかった term の位置を
+        clean_text（改行含む）に逆マップし、改行を含むスパン文字列を返す。
+        再構成できない場合は空文字列を返す。
+        """
+        pos_j = clean_joined.find(term)
+        if pos_j == -1:
+            return ''
+
+        # clean_text 内の開始位置を特定（非改行文字カウントで対応）
+        orig_start = -1
+        j_count = 0
+        for i, ch in enumerate(clean_text):
+            if ch != '\n':
+                if j_count == pos_j:
+                    orig_start = i
+                    break
+                j_count += 1
+
+        if orig_start == -1:
+            return ''
+
+        # 開始位置から term の各文字（改行はそのまま含める）を収集
+        span_chars = []
+        term_idx = 0
+        idx = orig_start
+        while term_idx < len(term) and idx < len(clean_text):
+            ch = clean_text[idx]
+            if ch == '\n':
+                span_chars.append('\n')
+            else:
+                span_chars.append(ch)
+                term_idx += 1
+            idx += 1
+
+        if term_idx < len(term):
+            return ''
+
+        return ''.join(span_chars)
 
     def generate_candidates(
         self,
@@ -320,6 +431,7 @@ class AIAnalyzer:
         frontmatter: Optional[Dict[str, Any]] = None,
         filename: str = "",
         document_text: Optional[str] = None,
+        raw_markdown: Optional[str] = None,
     ) -> tuple:
         """
         ドキュメント全文からOCR本文を抽出し、疑義箇所の抽出から候補生成までを一気通貫で行うメインAPI
@@ -332,14 +444,18 @@ class AIAnalyzer:
             clean_text = OCRTextProcessor.normalize_text(text)
 
         # Phase 1-c: ファイルコンテキストから domain_hint_bonus を構築
-        file_context_hint, proper_noun_terms, region_info, geo_noun_terms = (
-            self.file_context_hint_builder.build(
-                filename=filename,
-                frontmatter=frontmatter,
-                dict_dir=self.dict_dir,
-                body_text=clean_text,
-            )
+        _build = self.file_context_hint_builder.build(
+            filename=filename,
+            frontmatter=frontmatter,
+            dict_dir=self.dict_dir,
+            body_text=clean_text,
+            raw_markdown=raw_markdown or text,
         )
+        file_context_hint = _build.hints
+        proper_noun_terms = _build.proper_noun_terms
+        region_info = _build.region_info
+        geo_noun_terms = _build.geo_noun_terms
+        hint_sources = _build.hint_sources
 
         # Phase 1-b: 助詞書体スタイル解析（早期計算してひらがな誤認検出に使用）
         # document_text が渡された場合は全ページ結合テキストで判定し、
@@ -382,6 +498,10 @@ class AIAnalyzer:
         spans.extend(
             self.particle_script_analyzer.detect_hira_bigram_suspects(clean_text, style_hints)
         )
+
+        # I. FM 当事者名（plaintiff/defendant/judge）の確認スパン検出
+        #    rank1 = スパン自身（自己フォールバック） → 適正として表示
+        spans.extend(self.detect_fm_context_terms(clean_text, hint_sources))
 
         # 2. 各疑義箇所への候補生成 + テキスト内位置情報の付与
         # スパンの重複を除去（同一テキストが複数の検出器で報告された場合に1つにまとめる）
@@ -483,9 +603,11 @@ class AIAnalyzer:
                 soft_hint_candidates["ヨリ"] = "manual_override_seed"
 
             # GrammarValidator による検証
-            # _direct_candidates（ノイズスパン）は reject で即確定、それ以外は通常検証
+            # _direct_candidates（ノイズスパン）は reject で即確定。
+            # ただし _validation_result が同時に指定されている場合（FM確認スパン等）はそちらを優先。
             if direct_candidates is not None:
-                vr = ValidationResult(verdict='reject', score=0.0, reason=span_data['reason'])
+                pre_vr = span_data.get("_validation_result")
+                vr = pre_vr if pre_vr is not None else ValidationResult(verdict='reject', score=0.0, reason=span_data['reason'])
             else:
                 pre_vr = span_data.get("_validation_result")
                 if pre_vr is not None:
@@ -576,6 +698,7 @@ class AIAnalyzer:
                     "reason": span_data["reason"],
                     "confidence": span_data.get("confidence", 1.0),
                     "is_protected": span_data.get("is_protected", False),
+                    "span_category": span_data.get("span_category", "dict"),
                     "candidates": candidates,
                     "validation": validation_dict,
                     "is_bigram_suspect": bool(span_data.get("_kata_bigram_candidate")),
@@ -583,6 +706,12 @@ class AIAnalyzer:
                     "rank1_is_proper_noun": bool(rank1 and proper_noun_terms and rank1 in proper_noun_terms),
                     "rank1_from_shape": bool(rank1 and rank1 in _shape_cands),
                     "rank1_from_experimental_dict": bool(rank1 and rank1 in _experimental_forms),
+                    "rank1_from_frontmatter": bool(rank1 and any(
+                        s.startswith("frontmatter:") for s in hint_sources.get(rank1, [])
+                    )),
+                    "rank1_from_body": bool(rank1 and any(
+                        s.startswith("body:") for s in hint_sources.get(rank1, [])
+                    )),
                 })
                 search_pos = pos + len(text_span)
             # clean_text に出現しないスパン（OCR JSON 由来の文字が正規化後に消えた場合等）は除外
