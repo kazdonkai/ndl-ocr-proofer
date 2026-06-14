@@ -324,6 +324,25 @@ const Proofreader = forwardRef(function Proofreader({ document, currentPage, vie
     return () => container.removeEventListener('wheel', onWheel);
   }, [writingMode]);
 
+  // 横書きモード: highlight-layer 上（ハイライトスパン）でのホイールを textarea に転送
+  // pointer-events:none の layer でも子 span からバブルした wheel は届く。
+  // ここで preventDefault しないと layer が独立スクロールしてハイライト位置がズレる。
+  useEffect(() => {
+    const layer = highlightLayerRef.current;
+    if (!layer || writingMode !== 'horizontal') return;
+    const onWheel = (e) => {
+      const textarea = textareaRef.current;
+      if (!textarea || e.ctrlKey) return;
+      e.preventDefault();
+      textarea.scrollTop += e.deltaY;
+      textarea.scrollLeft += e.deltaX;
+      layer.scrollTop = textarea.scrollTop;
+      layer.scrollLeft = textarea.scrollLeft;
+    };
+    layer.addEventListener('wheel', onWheel, { passive: false });
+    return () => layer.removeEventListener('wheel', onWheel);
+  }, [writingMode]);
+
   // cleanup debounce timer on unmount
   useEffect(() => {
     return () => {
@@ -482,6 +501,7 @@ const Proofreader = forwardRef(function Proofreader({ document, currentPage, vie
           ocr_json: ocr,
           frontmatter: document?.frontmatter ?? null,
           document_text: allPagesText || null,
+          raw_markdown: document?.markdown_content ?? null,
         })
       });
       const data = await response.json();
@@ -820,6 +840,7 @@ const Proofreader = forwardRef(function Proofreader({ document, currentPage, vie
         dismissTrigger: trigger,
         candidatesViewed: popover.span.candidates?.length ?? 0,
         rank1FromExperimental: popover.span.rank1_from_experimental_dict ?? null,
+        rank1FromFrontmatter: popover.span.rank1_from_frontmatter ?? null,
       });
     }
     setPopover(null);
@@ -839,6 +860,7 @@ const Proofreader = forwardRef(function Proofreader({ document, currentPage, vie
       rejectedCandidate: candidate,
       tier: null,
       rank1FromExperimental: popover.span.rank1_from_experimental_dict ?? null,
+      rank1FromFrontmatter: popover.span.rank1_from_frontmatter ?? null,
     });
     // 除外済みとして記録 → 判定パネルから即時消去
     setRejectedSpanIds(prev => new Set([...prev, popover.spanId]));
@@ -873,6 +895,7 @@ const Proofreader = forwardRef(function Proofreader({ document, currentPage, vie
       candidateRank,
       hintSource: popover.span.soft_hint_candidates?.[candidate] ?? null,
       rank1FromExperimental: popover.span.rank1_from_experimental_dict ?? null,
+      rank1FromFrontmatter: popover.span.rank1_from_frontmatter ?? null,
     });
 
     const newSpans = analyzedSpans
@@ -1933,6 +1956,8 @@ const Proofreader = forwardRef(function Proofreader({ document, currentPage, vie
             data-span-id={span.id}
             className={[
               'highlight-span',
+              span.span_category === 'noise' ? 'highlight-noise' : '',
+              span.span_category === 'file' ? 'highlight-file' : '',
               activeSpanId === span.id ? 'highlight-active' : '',
               acceptedCorrections[span.id] !== undefined ? 'highlight-corrected' : '',
               span.is_protected ? 'highlight-protected' : '',
@@ -2741,6 +2766,12 @@ const Proofreader = forwardRef(function Proofreader({ document, currentPage, vie
               {popover.span.reason}
               {popover.span.rank1_from_experimental_dict && (
                 <span className="tag-experimental-dict">temporary辞書</span>
+              )}
+              {popover.span.rank1_from_frontmatter && (
+                <span className="tag-frontmatter-hint">frontmatter</span>
+              )}
+              {popover.span.rank1_from_body && (
+                <span className="tag-body-hint">body</span>
               )}
             </div>
             <div className="candidates-list">

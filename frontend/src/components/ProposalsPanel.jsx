@@ -74,7 +74,7 @@ export default function ProposalsPanel({ analyzedSpans, currentPageData, open, o
             style={{ cursor: 'pointer' }}
           >
             <div className="proposals-main-row">
-              <span className="crp-suspect">{sp.suspect_span}</span>
+              <span className={`crp-suspect${sp.span_category === 'file' ? ' crp-suspect--file' : sp.span_category === 'noise' ? ' crp-suspect--noise' : ''}`}>{sp.suspect_span}</span>
               <VerdictBadge verdict={vr.verdict} />
             </div>
 

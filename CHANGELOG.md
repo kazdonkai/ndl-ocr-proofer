@@ -8,6 +8,49 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [1.1.2] — 2026-06-14
+
+### Summary / 概要
+
+候補エンジンの文脈認識を大幅に強化したリリースです。  
+Frontmatter（ノートの書誌メタデータ）と本文（非OCR部分）の両方からコンテキストを抽出し、  
+それを候補スコアリングに反映する Phase 2 パイプラインを実装しました。  
+候補のカテゴリ（辞書由来 / 字形由来 / ファイル文脈由来）がUI上で色分け表示され、  
+どのヒントが候補を引き上げたかを確認できるようになりました。
+
+This release significantly strengthens the context-awareness of the candidate engine.  
+It implements the Phase 2 pipeline that extracts context from both Frontmatter (bibliographic metadata)  
+and document body (non-OCR Markdown content), feeding them into candidate scoring.  
+Candidate categories (dict / shape / file-context) are now color-coded in the UI,  
+making it visible which hint boosted a given candidate.
+
+### Added / 追加
+
+- **Phase 2 BodyExtractor** (`body_extractor.py`): Markdown 本文（非 OCR callout 部分）からトークンを抽出する新モジュール。`[!ocr]` callout を除外し、WikiLink・絵文字・ノイズを処理し、Frontmatter と同じフィルタリングを適用する。54 テスト追加。
+- **FM context detection** (`ai_analyzer.py`): Frontmatter の当事者・裁判官などのトークンに一致するスパンを confirmation span として検出し、bonus 付与するロジックを追加。`detect_fm_context_terms()` メソッドとして実装。
+- **FM/body hint 統合** (`file_context_hint.py`): FrontmatterExtractor（+26pt bonus）と BodyExtractor（+15pt bonus）の出力を候補スコアリングに統合。`BuildResult` dataclass により hint_sources（`rank1_from_frontmatter` / `rank1_from_body`）の追跡が可能になった。
+- **span_category フィールド** (`models.py`, `ai_analyzer.py`): AnalyzedSpan に `span_category`（`"dict"` / `"noise"` / `"file"`）を追加。候補がどのソースに由来するかをフロントエンドに伝播。
+- **span_category カラーコーディング** (`Proofreader.css`, `Proofreader.jsx`): `highlight-noise`（スレート系）/ `highlight-file`（ライム系）クラスによる色分け表示。
+- **FM / body タグ表示** (`Proofreader.jsx`): `rank1_from_frontmatter` / `rank1_from_body` が true の場合、popover に「FM」「本文」バッジを表示。
+- **ProposalsPanel 候補色分け** (`ProposalsPanel.jsx`): 候補リストパネルでも `span_category` に応じた色を適用。
+- **`rank1_from_frontmatter` ログ** (`learningEventLogger.js`): スキップ・却下・採用ログに `rank1FromFrontmatter` フィールドを追加。
+
+### Changed / 変更
+
+- **bonus-only 候補を proper_noun_terms に限定** (`candidate_engine.py`): FM / body トークンは加算 bonus のみとし、bonus ≥ 20.0 のみで候補を生成する "bonus-only" パスを `proper_noun_terms` 由来の語に限定。FM / body トークンが無関係なスパンへ候補を滑り込ませる問題を抑制。
+- **`raw_markdown` の通し配線** (`models.py`, `main.py`, `ai_analyzer.py`, `Proofreader.jsx`): AnalyzeRequest に `raw_markdown` フィールドを追加し、バックエンド解析で Frontmatter / body 抽出の入力として使用。フロントエンドから API への受け渡しも整備。
+
+### Fixed / 修正
+
+- **修正③ FM WikiLink heading anchor stripping** (`frontmatter_extractor.py`, `body_extractor.py`): `[[近世法制史#検地]]` のように `#見出し` 形式の anchor を含む WikiLink が `近世法制史#検地` のままトークン化されていた問題を修正。`_strip_wikilinks` で `#` 以降を除去し、`近世法制史` のみを返すようにした。`[[page#anchor|display]]` は既存の display text 優先ロジックで正しく処理される。
+
+### Notes / 注意事項
+
+- **FM/body bonus は additive のみ**: FM / body 由来の bonus は既存候補のスコアを加算するだけで、それ単独では bonus-only 候補を生成しません（proper_noun_terms に一致する場合を除く）。これは意図的な設計です。
+- **span_category は rank1 のカテゴリ**: `span_category` は提示される候補リストの rank1（先頭候補）がどのソース由来かを示します。複数のソースが関与する場合でも単一カテゴリが設定されます。
+
+---
+
 ## [1.1.0] — 2026-06-09
 
 ### Summary / 概要

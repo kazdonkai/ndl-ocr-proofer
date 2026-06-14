@@ -181,6 +181,7 @@ async def analyze_document(request: AnalyzeRequest):
                 frontmatter=request.frontmatter,
                 filename=request.filename,
                 document_text=request.document_text,
+                raw_markdown=request.raw_markdown,
             )
         )
         style_hints = DocumentStyleHints(**raw_style_hints.to_dict())

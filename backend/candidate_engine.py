@@ -129,8 +129,14 @@ class CandidateEngine:
                         bonus *= 0.5
                     scores[cand] = scores[cand] + bonus
             # bonus-only candidate (not yet in scores via dict or shape)
+            # 制約: proper_noun_terms 由来の語のみ bonus-only 候補化を許可。
+            # FM/body トークンは proper_noun_terms に含まれないため bonus-only を生成しない。
+            # → FM:subject「裁判言渡書案」等のメタデータ語が無関係スパンに割り込む問題を防止。
             for term, bonus in file_context_hint.items():
                 if term not in scores and bonus >= 20.0:
+                    # FM/body 由来トークンは加点専用 — bonus-only 候補化しない
+                    if not (proper_noun_terms and term in proper_noun_terms):
+                        continue
                     # フィルタ①: 文字数差 ±1 超は bonus-only としては不適 (spec item 2)
                     if abs(Ls - len(term)) > 1:
                         continue
@@ -139,15 +145,10 @@ class CandidateEngine:
                         continue
                     # フィルタ③: 2文字以下スパンへの geo alias ノイズ抑制
                     # prefectures/regional 由来の地名 alias が短スパンに bonus-only で滑り込むのを防ぐ
-                    # core.yaml 由来の法制語・一般語（入会・山論等）は geo_noun_terms に含まれないため対象外
                     if geo_noun_terms and term in geo_noun_terms and Ls < 3:
                         continue
-                    # proper_noun 由来の bonus-only 候補は STANDALONE_BONUS_MAX でキャップ。
-                    # 辞書・字形テーブルに根拠がない語が shape 候補(50pt)を超えないようにする。
-                    if proper_noun_terms and term in proper_noun_terms:
-                        scores[term] = min(bonus, STANDALONE_BONUS_MAX)
-                    else:
-                        scores[term] = bonus
+                    # proper_noun 由来の bonus-only 候補は STANDALONE_BONUS_MAX でキャップ
+                    scores[term] = min(bonus, STANDALONE_BONUS_MAX)
 
         # bonus-only 候補セット = step 3 で初めてスコアが付いた候補
         bonus_only: Set[str] = set(scores.keys()) - pre_file_ctx
