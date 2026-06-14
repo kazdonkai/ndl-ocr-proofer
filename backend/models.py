@@ -96,6 +96,7 @@ class AnalyzeRequest(BaseModel):
     frontmatter: dict | None = None
     filename: str = ""           # Phase 1-c: file context for domain hint
     document_text: str | None = None  # 全ページ結合テキスト（助詞スタイル判定をページ横断で行うために使用）
+    raw_markdown: str | None = None  # Phase 2: full markdown for body token extraction
 
 
 class OcrNormalizationSuggestion(BaseModel):
@@ -141,6 +142,15 @@ class AnalyzedSpan(BaseModel):
     # True when the rank-1 candidate originates from the experimental (staging/) dictionary tier.
     # Observation-only field — not used in is_dangerous calculation.
     rank1_from_experimental_dict: bool = False
+    # True when the rank-1 candidate was boosted by a frontmatter token (Phase 1 frontmatter bonus).
+    # Observation-only field — not used in is_dangerous calculation.
+    rank1_from_frontmatter: bool = False
+    # True when the rank-1 candidate was boosted by a body text token (Phase 2 body bonus).
+    # Observation-only field — not used in is_dangerous calculation.
+    rank1_from_body: bool = False
+    # UI color category: "dict" (default/amber) | "noise" (gray) | "file" (blue).
+    # Set by ai_analyzer; drives highlight-noise / highlight-file CSS classes in the frontend.
+    span_category: str = "dict"
 
     @computed_field
     @property
