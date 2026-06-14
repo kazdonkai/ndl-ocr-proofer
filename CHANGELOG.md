@@ -8,6 +8,32 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [Unreleased] — 1.1.3
+
+### Summary / 概要
+
+production 起動整備と実運用・観測フェーズ V2 の準備。  
+`./start.sh --prod` により、フロントエンドをビルドして FastAPI が単一プロセスで静的配信する本番起動モードを実装した。  
+ドキュメント（README / user guide / acceptance scenarios）を dev / prod 両モードに対応する形に整備した。
+
+This release adds a production startup mode via `./start.sh --prod`, which builds the frontend  
+and serves it from FastAPI as a single-process setup. Documentation has been restructured  
+to cover both dev and prod startup flows clearly.
+
+### Added / 追加
+
+- **production 起動モード** (`start.sh`): `./start.sh --prod` でフロントエンドを `npm run build` によりビルドし、FastAPI（port 8000）が静的ファイルをまとめて配信する 1 プロセス構成で起動するモードを追加。`--reload` なし・Vite dev server 不要。アクセス URL: `http://localhost:8000`。
+- **`logs/app.mode` によるモード記録**: `--prod` / `dev` の起動モードをファイルに記録し、`./start.sh --status` が prod/dev を区別して表示するように変更。
+- **フロントエンド静的配信ゲート** (`backend/main.py`): `SERVE_FRONTEND=true` 環境変数が渡された場合のみ `/assets` mount と SPA catch-all ルートを有効化。dist ルート直下の静的ファイル（`favicon.svg` 等）も配信。`/api/*` / `/docs` / `/openapi.json` は SPA に飲み込まれない設計。
+
+### Documentation / ドキュメント
+
+- **README.md Quick Start 再構成**: 依存インストール（初回のみ）と起動コマンド（dev / prod）を分離し、両モードのアクセス URL とプロセス構成を明記。ローカル専用（`127.0.0.1`）の制約を明示。
+- **`docs/user_guide.md` 更新**: URL 誤り修正（5173 → 5176）、起動セクションを dev / prod / 停止の 3 段構成に整理。
+- **`docs/acceptance_scenarios.md` 更新**: production モード受け入れ確認チェックリスト（9 項目）と範囲外一覧を追記。
+
+---
+
 ## [1.1.2] — 2026-06-14
 
 ### Summary / 概要

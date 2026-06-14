@@ -1,6 +1,21 @@
 # Task Tracker — proofreading-app
 
-最終更新: 2026-06-14（v1.1.2 リリース準備 — FM WikiLink fix / body_extractor Phase 2 / FM-body hint / bonus-only policy / span_category UI）
+最終更新: 2026-06-15（v1.1.3 開発開始 — production 起動整備 + 実験観測フェーズ V2 準備）
+
+---
+
+## v1.1.3 — 進行中（テーマ: production 起動整備 + 実運用・観測準備）
+
+**方針**: `./start.sh --prod` 対応を起点に、実運用環境の安定化と実験観測フェーズ V2 実施を進める。  
+Phase 4B（旧 PATCH API 削除）は v1.1.2 以前に完了済み。Phase 4C（YAML fallback 終了）はロック中。
+
+| タスク | ステータス | コミット |
+|--------|-----------|---------|
+| `./start.sh --prod` 実装（frontend build + FastAPI 静的配信） | ✅ 完了 | a4064d3 |
+| ドキュメント整備（README / user_guide / acceptance_scenarios） | ✅ 完了 | 51c2214 |
+| CHANGELOG [1.1.3] Unreleased 追加 | ✅ 完了 | — |
+| **実験観測フェーズ V2（本番史料 20〜30 件操作・集計）** | 🔍 観測待ち | — |
+| V2 集計・FALSE_POSITIVE_REVIEW 更新・案A 実装可否判断 | ⏳ V2 完了後 | — |
 
 ---
 

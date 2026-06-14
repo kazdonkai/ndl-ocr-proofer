@@ -85,13 +85,12 @@ cmd_stop() {
     rm -f "$PID_FILE"
   fi
 
-  # ポートで残ったプロセスも念のため終了
+  # ポートで残ったプロセスも念のため終了（複数 PID に対応）
   for port in $BACKEND_PORT $FRONTEND_PORT; do
-    local pid
-    pid=$(lsof -ti :"$port" 2>/dev/null || true)
-    if [[ -n "$pid" ]]; then
+    while IFS= read -r pid; do
+      [[ -n "$pid" ]] || continue
       kill "$pid" 2>/dev/null && log_info "port $port のプロセス (PID $pid) を停止しました"
-    fi
+    done < <(lsof -ti :"$port" 2>/dev/null)
   done
 
   log_info "停止完了"
