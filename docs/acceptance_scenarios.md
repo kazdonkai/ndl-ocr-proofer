@@ -1,7 +1,8 @@
 # 受け入れ確認シナリオ
 
 作成日: 2026-06-09  
-対象: proofreading-app（temporary / approval 辞書フロー）
+最終更新: 2026-06-15  
+対象: proofreading-app（temporary / approval 辞書フロー、production 起動モード）
 
 ---
 
@@ -131,3 +132,37 @@
 - ファイルがディレクトリから削除される
 - ファイル一覧から消える
 - AI 解析辞書がリロードされる
+
+---
+
+## production モード（`./start.sh --prod`）受け入れ確認
+
+追加日: 2026-06-15  
+対応バージョン: v1.1.3 以降
+
+### 前提
+
+```bash
+./start.sh --prod   # npm run build → uvicorn 起動（port 8000、--reload なし）
+```
+
+### チェックリスト
+
+| # | 確認項目 | 期待結果 |
+|---|---------|---------|
+| 1 | `http://localhost:8000/` にアクセス | アプリの UI（React）が表示される |
+| 2 | `/api/config` など既存 API | 200 が返り、従来通り動作する |
+| 3 | `/docs` にアクセス | FastAPI Swagger UI が表示される |
+| 4 | `/openapi.json` にアクセス | OpenAPI スキーマ JSON が返る |
+| 5 | 存在しない `/api/nonexistent` | `{"detail":"Not Found"}` の JSON 404 が返る（SPA に飲み込まれない） |
+| 6 | `http://localhost:8000/some-spa-route` など client-side route | `index.html` が返り、React ルーターが処理する |
+| 7 | `/favicon.svg` または `/icons.svg` | SVG ファイルが正しく配信される（Content-Type: `image/svg+xml`） |
+| 8 | `./start.sh --status` | 「frontend: dev server 未使用 (prod mode)」と表示される |
+| 9 | `./start.sh --stop` 後の `./start.sh`（開発モード） | port 5176 で Vite dev server が起動し、開発モードに戻れる |
+
+### 範囲外（現バージョン非対応）
+
+- `0.0.0.0` バインドによる LAN / 外部公開
+- systemd / Docker / nginx によるサーバーデプロイ
+- HTTPS 対応
+- 認証・アクセス制御

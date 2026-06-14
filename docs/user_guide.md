@@ -1,17 +1,49 @@
 # 利用手順メモ（ユーザー向け）
 
-作成日: 2026-06-09
+作成日: 2026-06-09  
+最終更新: 2026-06-15
 
 ---
 
 ## 起動
+
+### 開発モード（日常利用）
 
 ```bash
 cd /Users/kazumikaizuka/Obsidian/Minji/proofreading-app
 ./start.sh
 ```
 
-ブラウザで `http://localhost:5173` を開く。
+バックエンド（port 8000, `--reload` 有効）と Vite dev server（port 5176）の **2 プロセス**が起動する。
+
+ブラウザで以下を開く:
+
+```
+http://localhost:5176
+```
+
+### production モード
+
+```bash
+./start.sh --prod
+```
+
+`npm run build` 後に FastAPI（port 8000）が静的ファイルを配信する **1 プロセス**構成。`--reload` は無効。
+
+ブラウザで以下を開く:
+
+```
+http://localhost:8000
+```
+
+ローカル利用専用（`127.0.0.1` バインド）。LAN 公開・外部公開は現バージョン非対応。
+
+### 停止・確認
+
+```bash
+./start.sh --stop    # 停止
+./start.sh --status  # ポート・モードを確認
+```
 
 ---
 
