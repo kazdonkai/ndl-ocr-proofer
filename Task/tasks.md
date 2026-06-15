@@ -13,7 +13,7 @@ Phase 4B（旧 PATCH API 削除）は v1.1.2 以前に完了済み。Phase 4C（
 |--------|-----------|---------|
 | `./start.sh --prod` 実装（frontend build + FastAPI 静的配信） | ✅ 完了 | a4064d3 |
 | ドキュメント整備（README / user_guide / acceptance_scenarios） | ✅ 完了 | 51c2214 |
-| CHANGELOG [1.1.3] Unreleased 追加 | ✅ 完了 | — |
+| CHANGELOG [1.1.3] Unreleased 追加 + tasks.md v1.1.3 更新 | ✅ 完了 | 69f8266 |
 | **実験観測フェーズ V2（本番史料 20〜30 件操作・集計）** | 🔍 観測待ち | — |
 | V2 集計・FALSE_POSITIVE_REVIEW 更新・案A 実装可否判断 | ⏳ V2 完了後 | — |
 
