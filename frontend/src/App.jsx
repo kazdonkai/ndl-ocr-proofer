@@ -695,6 +695,14 @@ function App() {
     return () => window.removeEventListener('keydown', handler);
   }, [showFileBrowser]);
 
+  // Close settings modal with Escape (capturingKey handler is in capture phase and takes priority)
+  useEffect(() => {
+    if (!showSettings) return;
+    const handler = (e) => { if (e.key === 'Escape') setShowSettings(false); };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [showSettings]);
+
   // Ref to give document click handler access to current dropdown state
   // (avoids stale closure; updated synchronously on every render)
   const historyDropdownOpenRef = useRef(false);
@@ -940,7 +948,7 @@ function App() {
       </header>
 
       <main
-        className={`workspace ${isDragging ? 'is-dragging' : ''} ${showSettings ? 'settings-open' : ''}`}
+        className={`workspace ${isDragging ? 'is-dragging' : ''}`}
         ref={workspaceRef}
       >
         {showSettings && (

@@ -77,8 +77,14 @@ export default function SettingsSidebar({
     }
   };
 
+  const handleOverlayClick = (e) => {
+    if (e.target === e.currentTarget) onClose();
+  };
+
   return (
-    <aside className="settings-sidebar">
+    <div className="settings-modal-overlay" onClick={handleOverlayClick}>
+      <div className="settings-modal">
+      <div className="settings-modal-inner">
       <div className="sidebar-header-sm">SETTINGS</div>
 
       <div className="setting-item">
@@ -593,6 +599,8 @@ export default function SettingsSidebar({
       </div>
 
       <button className="btn-close-sm" onClick={onClose}>設定終了</button>
-    </aside>
+      </div>
+      </div>
+    </div>
   );
 }
