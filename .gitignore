@@ -52,6 +52,10 @@ scratch/
 # Internal developer snapshots (contain dev-env paths, not for public release)
 snapshots/
 
+# PDF OCR design documents — internal memo, excluded until OCR implementation phase
+docs/claude_code_pdf_ocr_prompt.md
+docs/pdf_ocr_design.md
+
 # OS
 .DS_Store
 Thumbs.db

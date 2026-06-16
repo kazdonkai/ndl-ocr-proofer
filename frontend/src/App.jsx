@@ -194,9 +194,6 @@ function App() {
   const toastTimerRef = useRef(null);
 
   const proofreaderRef = useRef(null);
-  const importFileRef = useRef(null);
-  const exportDropdownRef = useRef(null);
-  const [exportDropdownOpen, setExportDropdownOpen] = useState(false);
 
   // ─── Image zoom & pan ────────────────────────────────────────────────────
   const [imageZoom, setImageZoom] = useState(1.0);
@@ -685,15 +682,6 @@ function App() {
     return () => document.removeEventListener('click', handler);
   }, []);
 
-  useEffect(() => {
-    if (!exportDropdownOpen) return;
-    const handler = (e) => {
-      if (!exportDropdownRef.current?.contains(e.target)) setExportDropdownOpen(false);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [exportDropdownOpen]);
-
   // Scroll focused history item into view on keyboard navigation
   useEffect(() => {
     if (!historyDropdownOpen || historyFocusedIndex < 0 || !historyListRef.current) return;
@@ -875,40 +863,6 @@ function App() {
               title={`Set completion status to ${settings.document.completionStatusValue}`}
             >Complete</button>
           )}
-          {documentData && (
-            <>
-              <div className="export-dropdown-wrapper" ref={exportDropdownRef}>
-                <button className="btn" onClick={() => setExportDropdownOpen(v => !v)}>
-                  書き出し ▾
-                </button>
-                {exportDropdownOpen && (
-                  <div className="export-dropdown-menu">
-                    <button className="export-menu-item" onClick={() => { handleExportJson(); setExportDropdownOpen(false); }}>
-                      JSON で書き出し
-                    </button>
-                    <button className="export-menu-item" onClick={() => { handleExportCsv(); setExportDropdownOpen(false); }}>
-                      CSV で書き出し
-                    </button>
-                  </div>
-                )}
-              </div>
-              <button
-                className="btn"
-                onClick={() => importFileRef.current?.click()}
-                disabled={isImporting}
-                title="補正ログ（JSON/CSV）を読み込んで補正状態を復元します"
-              >
-                {isImporting ? '取込中...' : '取込'}
-              </button>
-              <input
-                ref={importFileRef}
-                type="file"
-                accept=".json,.csv"
-                style={{ display: 'none' }}
-                onChange={handleImportFile}
-              />
-            </>
-          )}
         </div>
       </header>
 
@@ -933,8 +887,10 @@ function App() {
             isRescanning={vaultFiles.isRescanning}
             rescanNotice={vaultFiles.rescanNotice}
             onVaultRescan={vaultFiles.handleVaultRescan}
-            onExportCsv={() => { handleExportCsv(); setShowSettings(false); }}
-            onExportJson={() => { handleExportJson(); setShowSettings(false); }}
+            onExportCsv={handleExportCsv}
+            onExportJson={handleExportJson}
+            onImportFile={handleImportFile}
+            isImporting={isImporting}
             onFlushEvents={flushToBackend}
             onOcrSettingChange={handleOcrSettingChange}
             onDictionarySettingChange={handleDictionarySettingChange}

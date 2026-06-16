@@ -1,5 +1,5 @@
 // Settings sidebar — maps to PluginSettingTab in Obsidian
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { displayKey } from '../state/useKeybindings';
 
 const KEYBINDING_LABELS = [
@@ -15,6 +15,7 @@ export default function SettingsSidebar({
   keybindings, capturingKey, setCapturingKey, resetKeybindings,
   isRescanning, rescanNotice, onVaultRescan,
   onExportCsv, onExportJson,
+  onImportFile, isImporting = false,
   onFlushEvents,
   // Phase 3C: ocrSettings / dictionarySettings / isSavingDictionary 廃止。
   // appConfig?.ocr / appConfig?.dictionary / appConfig?.status を正本として直接参照する。
@@ -30,6 +31,7 @@ export default function SettingsSidebar({
 }) {
   const [flushStatus, setFlushStatus] = useState(null); // null | 'pending' | 'ok' | 'error'
   const [flushedCount, setFlushedCount] = useState(null);
+  const importFileRef = useRef(null);
 
   const handleFlush = async () => {
     setFlushStatus('pending');
@@ -215,30 +217,6 @@ export default function SettingsSidebar({
           {isSavingConfig && <span className="setting-saving-indicator"> 保存中…</span>}
         </label>
         <span className="setting-hint">staging/ ディレクトリのtemporary辞書も読み込みます。候補スコアに ×0.8 の減衰が適用されます</span>
-      </div>
-
-      <div className="settings-section-label">インポート</div>
-
-      <div className="setting-item">
-        <label>デフォルト動作</label>
-        <div className="setting-radio-group">
-          <label className="setting-radio-label">
-            <input
-              type="radio" name="import-behavior" value="replace"
-              checked={settings.import.defaultBehavior === 'replace'}
-              onChange={() => updateSetting('import', 'defaultBehavior', 'replace')}
-            />
-            上書き (replace)
-          </label>
-          <label className="setting-radio-label">
-            <input
-              type="radio" name="import-behavior" value="merge"
-              checked={settings.import.defaultBehavior === 'merge'}
-              onChange={() => updateSetting('import', 'defaultBehavior', 'merge')}
-            />
-            追記 (merge)
-          </label>
-        </div>
       </div>
 
       <div className="settings-section-label">DOCUMENT STATUS</div>
@@ -436,21 +414,66 @@ export default function SettingsSidebar({
         )}
       </div>
 
+      <div className="settings-section-label">辞書データの書き出し</div>
+
       <div className="setting-item setting-export-row">
         <button
           className="btn"
           style={{ flex: 1, fontSize: '0.8rem', padding: '6px 0' }}
           onClick={onExportCsv}
         >
-          CSV 書き出し
+          CSV で書き出し
         </button>
         <button
           className="btn"
           style={{ flex: 1, fontSize: '0.8rem', padding: '6px 0' }}
           onClick={onExportJson}
         >
-          JSON 書き出し
+          JSON で書き出し
         </button>
+      </div>
+
+      <div className="settings-section-label">辞書データの取り込み</div>
+
+      <div className="setting-item">
+        <label>取り込み時の動作</label>
+        <div className="setting-radio-group">
+          <label className="setting-radio-label">
+            <input
+              type="radio" name="import-behavior" value="replace"
+              checked={settings.import.defaultBehavior === 'replace'}
+              onChange={() => updateSetting('import', 'defaultBehavior', 'replace')}
+            />
+            上書き (replace)
+          </label>
+          <label className="setting-radio-label">
+            <input
+              type="radio" name="import-behavior" value="merge"
+              checked={settings.import.defaultBehavior === 'merge'}
+              onChange={() => updateSetting('import', 'defaultBehavior', 'merge')}
+            />
+            追記 (merge)
+          </label>
+        </div>
+      </div>
+
+      <div className="setting-item">
+        <button
+          className="btn"
+          style={{ width: '100%', fontSize: '0.8rem', padding: '6px 0' }}
+          onClick={() => importFileRef.current?.click()}
+          disabled={isImporting}
+          title="補正ログ（JSON/CSV）を読み込んで補正状態を復元します"
+        >
+          {isImporting ? '取り込み中...' : '辞書データを取り込む (JSON / CSV)'}
+        </button>
+        <input
+          ref={importFileRef}
+          type="file"
+          accept=".json,.csv"
+          style={{ display: 'none' }}
+          onChange={onImportFile}
+        />
       </div>
 
       <button className="btn-close-sm" onClick={onClose}>設定終了</button>
