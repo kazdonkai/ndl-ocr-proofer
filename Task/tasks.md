@@ -1,6 +1,6 @@
 # Task Tracker — proofreading-app
 
-最終更新: 2026-06-15（v1.1.3 開発開始 — production 起動整備 + 実験観測フェーズ V2 準備）
+最終更新: 2026-06-17（Obsidian で現在ノートを開く機能 追加）
 
 ---
 
@@ -14,8 +14,26 @@ Phase 4B（旧 PATCH API 削除）は v1.1.2 以前に完了済み。Phase 4C（
 | `./start.sh --prod` 実装（frontend build + FastAPI 静的配信） | ✅ 完了 | a4064d3 |
 | ドキュメント整備（README / user_guide / acceptance_scenarios） | ✅ 完了 | 51c2214 |
 | CHANGELOG [1.1.3] Unreleased 追加 + tasks.md v1.1.3 更新 | ✅ 完了 | 69f8266 |
+| **「Obsidianで開く」ボタン追加（obsidian:// URI 連携）** | ✅ 完了 | (本コミット) |
 | **実験観測フェーズ V2（本番史料 20〜30 件操作・集計）** | 🔍 観測待ち | — |
 | V2 集計・FALSE_POSITIVE_REVIEW 更新・案A 実装可否判断 | ⏳ V2 完了後 | — |
+
+### Backlog（Obsidian 連携 改善候補）
+
+- **docs: Vault 名ミス時の注意書き追加**
+  - 現状、Vault 名が間違っていても Obsidian が起動しないだけで無言失敗する
+  - README または docs に「Obsidian が起動しない場合は Vault 名と `obsidian://` ハンドラ設定を確認」旨を追記
+  - 実装コスト低・実施タイミング自由
+- **UI: Obsidian 設定を専用セクションに整理**
+  - 現在は VAULT セクション内に Vault名フィールドを追加している
+  - 将来の「Obsidian プラグイン連携設定」等が増えたタイミングで `OBSIDIAN` セクションとして独立させる
+  - 「Obsidian プラグイン連携」チケットと同時対応が自然
+- **API 拡張: `vault_relative_path` を DocumentResponse に追加**
+  - 現在 `docId` は「ユーザーが入力したクエリ文字列」であり、plain ファイル名の場合にパスが不明
+  - vault 内に同名ファイルが複数あると Obsidian 側で意図しないノートが開く可能性がある
+  - backend の `vault_reader.get_document_data()` が解決した `md_path` を vault 相対パスとして
+    `DocumentResponse.vault_relative_path` に追加し、フロントエンドでこちらを優先使用する
+  - backend / frontend / obsidianUri.js の 3 箇所が変更対象
 
 ---
 

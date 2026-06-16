@@ -115,6 +115,23 @@ export default function SettingsSidebar({
       <div className="settings-section-label">VAULT</div>
 
       <div className="setting-item">
+        <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.8rem' }}>
+          Obsidian Vault名
+          {configStatus?.vault_root && !settings.obsidian?.vaultName && (
+            <span className="setting-hint"> (自動: {configStatus.vault_root.replace(/\\/g, '/').split('/').filter(Boolean).slice(-1)[0]})</span>
+          )}
+        </label>
+        <input
+          type="text"
+          className="setting-text-input"
+          value={settings.obsidian?.vaultName ?? ''}
+          onChange={e => updateSetting('obsidian', 'vaultName', e.target.value)}
+          placeholder="空欄のとき vault_root から自動取得"
+          style={{ width: '100%', boxSizing: 'border-box' }}
+        />
+      </div>
+
+      <div className="setting-item">
         <label className="setting-check-label">
           <input
             type="checkbox"

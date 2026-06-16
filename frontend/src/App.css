@@ -1292,6 +1292,20 @@ body {
   color: #0f172a;
 }
 
+.btn-obsidian {
+  background-color: transparent;
+  border: 1px solid #7c5cbf;
+  color: #a78bdc;
+  font-size: 0.78rem;
+  padding: 5px 12px;
+}
+
+.btn-obsidian:hover {
+  background-color: #7c5cbf;
+  color: #fff;
+  transform: translateY(-1px);
+}
+
 /* ── Toast notification ──────────────────────────────────────────── */
 .app-toast {
   position: fixed;

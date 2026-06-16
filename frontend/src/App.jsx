@@ -26,6 +26,7 @@ import {
 } from './services/correctionSerializer';
 
 import { getImageUrl } from './utils/imageUrl';
+import { buildObsidianUri, deriveVaultName } from './utils/obsidianUri';
 import { flushToBackend } from './services/learningEventLogger';
 
 function App() {
@@ -428,6 +429,25 @@ function App() {
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     setToast(msg);
     toastTimerRef.current = setTimeout(() => setToast(null), 3000);
+  };
+
+  // ─── Open in Obsidian ────────────────────────────────────────────────────
+  const handleOpenInObsidian = () => {
+    if (!docId) {
+      showToast('ノートが開かれていません');
+      return;
+    }
+    const vaultName = settings.obsidian?.vaultName || deriveVaultName(configStatus?.vault_root);
+    if (!vaultName) {
+      showToast('Vault名が未設定です。設定 > OBSIDIAN から Vault名を入力してください。');
+      return;
+    }
+    const uri = buildObsidianUri(vaultName, docId);
+    if (!uri) {
+      showToast('Obsidian URI を生成できませんでした');
+      return;
+    }
+    window.location.href = uri;
   };
 
   // ─── Completion status ───────────────────────────────────────────────────
@@ -862,6 +882,13 @@ function App() {
               onClick={handleMarkComplete}
               title={`Set completion status to ${settings.document.completionStatusValue}`}
             >Complete</button>
+          )}
+          {documentData && (
+            <button
+              className="btn btn-obsidian"
+              onClick={handleOpenInObsidian}
+              title="Obsidian で現在のノートを開く"
+            >Obsidianで開く</button>
           )}
         </div>
       </header>

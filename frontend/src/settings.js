@@ -9,6 +9,9 @@ export const DEFAULT_SETTINGS = {
   vault: {
     showNotificationOnRescan: true,
   },
+  obsidian: {
+    vaultName: '',
+  },
   panel: {
     openOnStartup: false,
     autoCloseAfterSelect: true,
