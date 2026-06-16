@@ -9,8 +9,10 @@
 ```
 data/dictionaries/
   temporary/           ← temporary 辞書 CSV（複数ファイル可）
-    user_manual_temporary.csv   ← 基幹ファイル（削除不可）
+    user_manual_temporary.csv   ← 基幹ファイル（削除・rename 不可）
   approved/            ← approval 辞書 CSV（複数ファイル可）
+    base.csv           ← 研究課題非依存の基盤語彙（OCR 誤認識矯正を含む）
+    入会研究.csv        ← ドメイン特化語彙の例（課題別に追加可）
   archive/
     old_versions/      ← 書き込み前バックアップ（自動）
 ```
@@ -122,6 +124,7 @@ PROMOTION_CANDIDATE_THRESHOLD = 3  # backend/main.py:68
 | POST | `/api/dictionary/promote` | temporary → approval 昇格 |
 | POST | `/api/dictionary/files` | 辞書ファイル新規作成 |
 | DELETE | `/api/dictionary/files/{dict_type}/{filename}` | 辞書ファイル削除 |
+| PATCH | `/api/dictionary/files/{dict_type}/{filename}` | 辞書ファイル名変更（body: `{"new_filename": "新名称.csv"}`） |
 | POST | `/api/dictionary/backup` | approval 全ファイルバックアップ |
 
 ---
@@ -134,3 +137,4 @@ PROMOTION_CANDIDATE_THRESHOLD = 3  # backend/main.py:68
 4. **on_conflict の UI**: 昇格ボタン押下時の競合解決 UI が存在する前提だが、実装詳細は DictionaryManager.jsx 側に委ねる
 5. **ファイル名制約**: `^[^/\\\.][^/\\]*\.csv$`（`..` 禁止、`.csv` 必須、ディレクトリ区切り禁止）
 6. **approval の `approved` フラグ**: 常に `true` で登録されるが、現在はロード時の参照値として使われていない（将来の検証用）
+7. **rename の保護制約**: `user_manual_temporary.csv` は rename 不可（バックエンドが `ValueError` を返す）。それ以外のファイルは protect=true エントリを含む場合でも rename は可能（protect はファイル削除のみに適用）。

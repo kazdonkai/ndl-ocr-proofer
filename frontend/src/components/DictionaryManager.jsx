@@ -475,7 +475,7 @@ export default function DictionaryManager({ onClose }) {
   // ── 昇格完了 ────────────────────────────────────────────────────────────────
   const handlePromoteDone = async (status) => {
     setPromoteTarget(null);
-    const label = { promoted: '昇格', overwritten: '上書き昇格', skipped: 'スキップ（approval 維持・temp 削除）' };
+    const label = { promoted: '昇格完了（temporary から削除・approval へ追加）', overwritten: '上書き昇格完了（temporary から削除・approval を上書き）', skipped: 'approval 維持・temporary から削除（競合のため上書きせず）' };
     showInfo(`完了: ${label[status] ?? status}`);
     await load();
   };
@@ -810,7 +810,7 @@ export default function DictionaryManager({ onClose }) {
                             <button
                               className="dict-btn dict-btn-promote dict-btn-sm"
                               onClick={() => setPromoteTarget(entry)}
-                              title="approval 辞書へ昇格"
+                              title={approvalFiles.length === 0 ? 'approval 辞書ファイルがありません。先に「＋ファイル作成」で approval ファイルを作成してください' : 'approval 辞書へ昇格'}
                               disabled={approvalFiles.length === 0}
                             >
                               ▲ 昇格
@@ -861,7 +861,7 @@ export default function DictionaryManager({ onClose }) {
               <p>
                 <strong>辞書ファイル「{deleteFileTarget.filename}」を削除しますか？</strong><br />
                 <span className="dict-cell-dim" style={{ fontSize: '0.85rem' }}>
-                  削除前に自動バックアップされます。この操作はエントリ削除とは異なり、ファイル全体が対象です。
+                  このファイルのエントリ全 {allEntries.filter(e => e.source_file === deleteFileTarget.filename).length} 件が対象です。削除前に自動バックアップされます。
                 </span>
               </p>
               <div className="dict-form-actions">
