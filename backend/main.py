@@ -26,7 +26,7 @@ from models import (
     ApprovedDictEntry, AddApprovedEntryRequest,
     UpdateApprovedEntryRequest, ApprovedDictListResponse,
     UpdateTemporaryEntryRequest, PromoteEntryRequest, PromoteEntryResponse,
-    CreateDictFileRequest,
+    CreateDictFileRequest, RenameDictFileRequest,
 )
 from temporary_dict_manager import TemporaryDictManager
 from approved_dict_manager import ApprovedDictManager
@@ -699,6 +699,44 @@ async def create_dict_file(request: CreateDictFileRequest):
     except HTTPException:
         raise
     except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.patch("/api/dictionary/files/{dict_type}/{filename}")
+async def rename_dict_file(dict_type: str, filename: str, request: RenameDictFileRequest):
+    """辞書ファイルをリネームする（バックアップ後）。
+
+    拒否条件:
+      - old/new いずれかのファイル名が不正（パストラバーサル・拡張子違反）
+      - old == new（同名リネーム） → 422
+      - new が既に存在する → 409
+      - user_manual_temporary.csv の rename（temporary のみ） → 422
+    """
+    try:
+        _validate_dict_filename(filename)
+        _validate_dict_filename(request.new_filename)
+        if dict_type == "approval":
+            approved_dict_manager.rename_file(filename, request.new_filename)
+        elif dict_type == "temporary":
+            temporary_dict_manager.rename_file(filename, request.new_filename)
+        else:
+            raise HTTPException(status_code=422, detail=f"不正な dict_type: '{dict_type}'")
+        _use_exp = get_config_loader().get_dictionary_settings().use_experimental
+        ai_analyzer.reload_dictionary(use_experimental=_use_exp)
+        return {
+            "renamed_from": filename,
+            "renamed_to": request.new_filename,
+            "dict_type": dict_type,
+            "approval_files": approved_dict_manager.list_files(),
+            "temporary_files": temporary_dict_manager.list_files(),
+        }
+    except HTTPException:
+        raise
+    except FileExistsError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    except (ValueError, FileNotFoundError) as e:
         raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

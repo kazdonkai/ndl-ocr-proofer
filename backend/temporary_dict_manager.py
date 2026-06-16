@@ -306,6 +306,29 @@ class TemporaryDictManager:
         path.unlink()
         return backup_path
 
+    def rename_file(self, old_filename: str, new_filename: str) -> str:
+        """辞書ファイルをリネームする（バックアップ後）。新ファイル名を返す。
+
+        拒否条件:
+          - old_filename が DEFAULT_FILE（user_manual_temporary.csv）
+          - old_filename == new_filename（同名リネーム）
+          - new_filename が既に存在する
+          - いずれかのファイル名が不正（_csv_path によるパストラバーサル検出）
+        """
+        if old_filename == self.DEFAULT_FILE:
+            raise ValueError(f"'{old_filename}' は基幹 temporary ファイルのため名前変更できません")
+        if old_filename == new_filename:
+            raise ValueError(f"新しいファイル名が現在のファイル名と同じです: '{old_filename}'")
+        old_path = self._csv_path(old_filename)
+        new_path = self._csv_path(new_filename)
+        if not old_path.exists():
+            raise FileNotFoundError(f"辞書ファイルが見つかりません: {old_filename}")
+        if new_path.exists():
+            raise FileExistsError(f"ファイルが既に存在します: {new_filename}")
+        self.backup(old_filename)
+        old_path.rename(new_path)
+        return new_filename
+
     def has_protected_entries(self, filename: str) -> bool:
         """protect=true のエントリが存在するか確認する。"""
         try:

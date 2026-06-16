@@ -217,6 +217,26 @@ class ApprovedDictManager:
         except Exception:
             return False
 
+    def rename_file(self, old_filename: str, new_filename: str) -> str:
+        """辞書ファイルをリネームする（バックアップ後）。新ファイル名を返す。
+
+        拒否条件:
+          - old_filename == new_filename（同名リネーム）
+          - new_filename が既に存在する
+          - いずれかのファイル名が不正（_csv_path によるパストラバーサル検出）
+        """
+        if old_filename == new_filename:
+            raise ValueError(f"新しいファイル名が現在のファイル名と同じです: '{old_filename}'")
+        old_path = self._csv_path(old_filename)
+        new_path = self._csv_path(new_filename)
+        if not old_path.exists():
+            raise FileNotFoundError(f"辞書ファイルが見つかりません: {old_filename}")
+        if new_path.exists():
+            raise FileExistsError(f"ファイルが既に存在します: {new_filename}")
+        self._backup(old_filename)
+        old_path.rename(new_path)
+        return new_filename
+
     def delete_file(self, filename: str) -> str:
         """辞書ファイルを削除する（バックアップ後）。バックアップパスを返す。"""
         backup_path = self._backup(filename)

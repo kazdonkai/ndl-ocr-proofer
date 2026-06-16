@@ -253,6 +253,22 @@ export async function deleteDictFile(dictType, filename) {
   return await res.json();
 }
 
+export async function renameDictFile(dictType, filename, newFilename) {
+  const res = await fetch(
+    `/api/dictionary/files/${encodeURIComponent(dictType)}/${encodeURIComponent(filename)}`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ new_filename: newFilename }),
+    }
+  );
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || 'ファイルの名前変更に失敗しました');
+  }
+  return await res.json();
+}
+
 export async function saveDocumentPage(id, pageData) {
   const encodedId = encodeURIComponent(id);
   const res = await fetch(`/api/document/${encodedId}/save`, {

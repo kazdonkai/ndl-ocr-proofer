@@ -318,3 +318,8 @@ class CreateDictFileRequest(BaseModel):
     """POST /api/dictionary/files のリクエスト。"""
     dict_type: str   # "approval" | "temporary"
     filename: str    # .csv 拡張子を含む
+
+
+class RenameDictFileRequest(BaseModel):
+    """PATCH /api/dictionary/files/{dict_type}/{filename} のリクエスト。"""
+    new_filename: str  # .csv 拡張子を含む

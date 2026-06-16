@@ -6,12 +6,14 @@ import {
   deleteApprovedEntry,
   backupDictionary,
   getTemporaryTerms,
+  registerTemporaryTerm,
   updateTemporaryEntry,
   deleteTemporaryEntry,
   toggleTemporaryTerm,
   promoteEntry,
   createDictFile,
   deleteDictFile,
+  renameDictFile,
 } from '../services/documentService';
 
 // ── variants 変換ユーティリティ ───────────────────────────────────────────────
@@ -188,6 +190,64 @@ function CreateFileDialog({ onClose, onCreated }) {
   );
 }
 
+// ── サブコンポーネント: 辞書ファイル名変更ダイアログ ──────────────────────────
+
+function RenameFileDialog({ dictType, currentFilename, onClose, onRenamed }) {
+  const [newName, setNewName] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+
+  const handleRename = async (e) => {
+    e.preventDefault();
+    let name = newName.trim();
+    if (!name) { setError('新しいファイル名を入力してください'); return; }
+    if (!name.endsWith('.csv')) name += '.csv';
+    if (name === currentFilename) { setError('新しいファイル名が現在のファイル名と同じです'); return; }
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await renameDictFile(dictType, currentFilename, name);
+      onRenamed(res);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="dict-confirm-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="dict-confirm-box" style={{ minWidth: '22rem' }}>
+        <div style={{ fontWeight: 'bold', marginBottom: '0.75rem' }}>辞書ファイル名変更</div>
+        <div style={{ fontSize: '0.85rem', color: '#666', marginBottom: '0.75rem' }}>
+          現在: <strong>{currentFilename}</strong>
+        </div>
+        <form onSubmit={handleRename}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', marginBottom: '1rem' }}>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+              <span style={{ fontSize: '0.85rem', color: '#666' }}>新しいファイル名（.csv 自動付与）</span>
+              <input
+                value={newName}
+                onChange={e => setNewName(e.target.value)}
+                placeholder="例: 入会研究2"
+                autoFocus
+                style={{ padding: '0.4rem', borderRadius: '4px', border: '1px solid #ccc' }}
+              />
+            </label>
+          </div>
+          {error && <div className="dict-msg-error">{error}</div>}
+          <div className="dict-form-actions">
+            <button type="submit" className="dict-btn dict-btn-primary" disabled={saving}>
+              {saving ? '変更中…' : '名前変更'}
+            </button>
+            <button type="button" className="dict-btn dict-btn-secondary" onClick={onClose}>キャンセル</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 // ── メインコンポーネント ───────────────────────────────────────────────────────
 
 export default function DictionaryManager({ onClose }) {
@@ -224,6 +284,15 @@ export default function DictionaryManager({ onClose }) {
 
   // ── ファイル作成ダイアログ ────────────────────────────────────────────────────
   const [showCreateFile, setShowCreateFile] = useState(false);
+
+  // ── ファイル名変更ダイアログ ──────────────────────────────────────────────────
+  const [renameFileTarget, setRenameFileTarget] = useState(null); // { dictType, filename }
+
+  // ── temporary 手動登録フォーム ──────────────────────────────────────────────
+  const [showTempRegForm, setShowTempRegForm] = useState(false);
+  const [tempRegForm, setTempRegForm] = useState({ term: '', normalized: '', category: '', note: '' });
+  const [tempRegSaving, setTempRegSaving] = useState(false);
+  const [tempRegError, setTempRegError] = useState(null);
 
   // ── メッセージ ───────────────────────────────────────────────────────────────
   const [infoMsg, setInfoMsg] = useState(null);
@@ -425,6 +494,14 @@ export default function DictionaryManager({ onClose }) {
     }
   };
 
+  // ── ファイル名変更完了 ──────────────────────────────────────────────────────
+  const handleRenamedFile = async (res) => {
+    setRenameFileTarget(null);
+    setSelectedFile(res.renamed_to);
+    showInfo(`名前変更完了: ${res.renamed_from} → ${res.renamed_to}`);
+    await load();
+  };
+
   // ── バックアップ ────────────────────────────────────────────────────────────
   const handleBackup = async () => {
     try {
@@ -432,6 +509,25 @@ export default function DictionaryManager({ onClose }) {
       showInfo(`バックアップ完了: ${res.backed_up} ファイル`);
     } catch (e) {
       setError(e.message);
+    }
+  };
+
+  // ── temporary 手動登録 ──────────────────────────────────────────────────────
+  const handleTempRegister = async (e) => {
+    e.preventDefault();
+    if (!tempRegForm.term.trim() || !tempRegForm.normalized.trim()) return;
+    setTempRegSaving(true);
+    setTempRegError(null);
+    try {
+      await registerTemporaryTerm(tempRegForm);
+      setTempRegForm({ term: '', normalized: '', category: '', note: '' });
+      setShowTempRegForm(false);
+      showInfo('temporary 語を登録しました');
+      await load();
+    } catch (err) {
+      setTempRegError(err.message ?? '登録失敗');
+    } finally {
+      setTempRegSaving(false);
     }
   };
 
@@ -464,6 +560,11 @@ export default function DictionaryManager({ onClose }) {
             <button className="dict-btn dict-btn-primary" onClick={() => { setShowAddForm(v => !v); setAddError(null); }}>
               {showAddForm ? '▲ キャンセル' : '＋ エントリ追加'}
             </button>
+            {dictTypeFilter === 'temporary' && (
+              <button className="dict-btn dict-btn-primary" onClick={() => { setShowTempRegForm(v => !v); setTempRegError(null); }}>
+                {showTempRegForm ? '▲ キャンセル' : '＋ temporary 登録'}
+              </button>
+            )}
             <button className="dict-manager-close" onClick={onClose}>✕</button>
           </div>
         </div>
@@ -522,9 +623,36 @@ export default function DictionaryManager({ onClose }) {
           </form>
         )}
 
+        {/* ── temporary 手動登録フォーム ── */}
+        {showTempRegForm && (
+          <form className="dict-add-form" onSubmit={handleTempRegister}>
+            <div className="dict-add-form-title">temporary 語の手動登録</div>
+            <div className="dict-form-row">
+              <label>term（疑義表記）*
+                <input value={tempRegForm.term} onChange={e => setTempRegForm(f => ({ ...f, term: e.target.value }))} placeholder="例: 山論" />
+              </label>
+              <label>normalized（正規形）*
+                <input value={tempRegForm.normalized} onChange={e => setTempRegForm(f => ({ ...f, normalized: e.target.value }))} placeholder="例: 山論" />
+              </label>
+              <label>category
+                <input value={tempRegForm.category} onChange={e => setTempRegForm(f => ({ ...f, category: e.target.value }))} placeholder="例: 法制語" />
+              </label>
+              <label>note
+                <input value={tempRegForm.note} onChange={e => setTempRegForm(f => ({ ...f, note: e.target.value }))} placeholder="任意メモ" />
+              </label>
+            </div>
+            {tempRegError && <div className="dict-msg-error">{tempRegError}</div>}
+            <div className="dict-form-actions">
+              <button type="submit" className="dict-btn dict-btn-primary" disabled={tempRegSaving}>
+                {tempRegSaving ? '登録中…' : '登録'}
+              </button>
+            </div>
+          </form>
+        )}
+
         {/* ── フィルタバー ── */}
         <div className="dict-filters">
-          <select value={dictTypeFilter} onChange={e => { setDictTypeFilter(e.target.value); setSelectedFile('all'); }}
+          <select value={dictTypeFilter} onChange={e => { setDictTypeFilter(e.target.value); setSelectedFile('all'); setShowTempRegForm(false); }}
             className="dict-file-select" title="辞書種別で絞り込み">
             <option value="all">全種別 ({allEntries.length})</option>
             <option value="approval">approval のみ ({approvedEntries.length})</option>
@@ -541,13 +669,22 @@ export default function DictionaryManager({ onClose }) {
           </select>
 
           {canDeleteFile && selectedFileDictType && (
-            <button
-              className="dict-btn dict-btn-danger dict-btn-sm"
-              onClick={() => setDeleteFileTarget({ dictType: selectedFileDictType, filename: selectedFile })}
-              title={`「${selectedFile}」を削除`}
-            >
-              ファイル削除
-            </button>
+            <>
+              <button
+                className="dict-btn dict-btn-secondary dict-btn-sm"
+                onClick={() => setRenameFileTarget({ dictType: selectedFileDictType, filename: selectedFile })}
+                title={`「${selectedFile}」の名前を変更`}
+              >
+                名前変更
+              </button>
+              <button
+                className="dict-btn dict-btn-danger dict-btn-sm"
+                onClick={() => setDeleteFileTarget({ dictType: selectedFileDictType, filename: selectedFile })}
+                title={`「${selectedFile}」を削除`}
+              >
+                ファイル削除
+              </button>
+            </>
           )}
 
           <input
@@ -571,10 +708,17 @@ export default function DictionaryManager({ onClose }) {
                 ＋ エントリを追加する
               </button>
             ) : (
-              <p className="dict-empty-hint">
-                temporary エントリは校正画面から自動登録されます。<br />
-                登録後にこの画面で ▲ 昇格 できます。
-              </p>
+              <>
+                <p className="dict-empty-hint">
+                  temporary エントリは校正画面から自動登録されます。<br />
+                  または「＋ temporary 登録」ボタンから手動登録できます。<br />
+                  登録後にこの画面で ▲ 昇格 できます。
+                </p>
+                <button className="dict-btn dict-btn-primary"
+                  onClick={() => { setShowTempRegForm(true); setTempRegError(null); }}>
+                  ＋ temporary 登録
+                </button>
+              </>
             )}
           </div>
         ) : (
@@ -754,6 +898,16 @@ export default function DictionaryManager({ onClose }) {
                 setAddError(null);
               }
             }}
+          />
+        )}
+
+        {/* ── ファイル名変更ダイアログ ── */}
+        {renameFileTarget && (
+          <RenameFileDialog
+            dictType={renameFileTarget.dictType}
+            currentFilename={renameFileTarget.filename}
+            onClose={() => setRenameFileTarget(null)}
+            onRenamed={handleRenamedFile}
           />
         )}
       </div>
