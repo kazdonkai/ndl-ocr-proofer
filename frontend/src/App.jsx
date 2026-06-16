@@ -737,7 +737,7 @@ function App() {
   return (
     <div className="app-container" style={appStyle}>
       <header className="app-header">
-        <h1>Classical OCR Proofer</h1>
+        <h1>影印校エディタ</h1>
         <div className="header-controls">
           <div className="search-bar">
             <button

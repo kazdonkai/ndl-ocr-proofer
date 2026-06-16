@@ -1,14 +1,16 @@
-# NDL OCR Proofer
+# 影印校エディタ
+
+*Japanese name: 影印校エディタ — a browser-based collation editor for historical OCR*
 
 [日本語](README.md) | English
 
-NDL OCR Proofer is a proofreading assistant for researchers who need to review, correct, and record OCR text generated from Japanese vertical historical materials, including outputs from NDL Koten OCR.
+影印校エディタ is a proofreading assistant for researchers who need to review, correct, and record OCR text generated from Japanese vertical historical materials, including outputs from NDL Koten OCR.
 
 OCR output from historical sources such as manuscripts, classical books, early modern documents, and vertically written research materials cannot usually be used as research-ready text without careful review. Character misrecognition, place names, personal names, historical terminology, old character forms, and vertical writing conventions all require comparison with the original images.
 
 This application reads Markdown notes from a configured Obsidian Vault and provides a browser-based interface for checking OCR text, page images, and correction candidates. It combines research vocabulary dictionaries, character-shape confusion rules, proper noun hints, and particle-script detection to highlight suspicious spans and record decisions such as accepting a candidate, entering a manual correction, skipping, or rejecting a suggestion.
 
-NDL OCR Proofer is not intended to simply make OCR text look cleaner. It is a working environment for comparing source images with OCR text, accumulating proofreading decisions, and turning OCR output into research-usable textual data.
+影印校エディタ is not intended to simply make OCR text look cleaner. It is a working environment for comparing source images with OCR text, accumulating proofreading decisions, and turning OCR output into research-usable textual data.
 
 ## Features
 

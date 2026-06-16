@@ -56,6 +56,14 @@ snapshots/
 docs/claude_code_pdf_ocr_prompt.md
 docs/pdf_ocr_design.md
 
+# Non-public evaluation materials — may contain unpublished research text or internal protocols
+evaluation/datasets/test_kozuke_mountain.md
+evaluation/datasets/test_mismatch_region.md
+evaluation/datasets/test_shinano_nyukai.md
+evaluation/docs/EXPERIMENTAL_COMPARISON_PROTOCOL.md
+evaluation/docs/EXPERIMENTAL_LOG_SCHEMA.md
+evaluation/docs/FALSE_POSITIVE_REVIEW.md
+
 # OS
 .DS_Store
 Thumbs.db
