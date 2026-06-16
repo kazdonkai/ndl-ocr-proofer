@@ -12,7 +12,7 @@ import { usePageView } from './state/usePageView';
 import { useVaultFiles } from './state/useVaultFiles';
 import { useDocumentOpen } from './state/useDocumentOpen';
 
-import { saveDocumentPage, runOcrForDocument as apiRunOcrForDocument, runOcrForPage as apiRunOcrForPage, updateDocumentStatus, getTemporaryTerms, registerTemporaryTerm, toggleTemporaryTerm, getAppConfig, getConfigStatus, updateAppConfig } from './services/documentService';
+import { saveDocumentPage, runOcrForDocument as apiRunOcrForDocument, runOcrForPage as apiRunOcrForPage, updateDocumentStatus, registerTemporaryTerm, getAppConfig, getConfigStatus, updateAppConfig } from './services/documentService';
 // Phase 3D: getOcrSettings / getDictionarySettings は documentService.js からも削除済み（旧 GET /api/settings/{ocr,dictionary} は backend からも削除済み）
 // Phase 2C: updateOcrSettings / updateDictionarySettings は旧 API（deprecated）のため App.jsx 内では未使用
 import { logDictionarySettingChanged } from './services/learningEventLogger';
@@ -60,44 +60,9 @@ function App() {
     }
   };
 
-  // ─── temporary辞書 state (Phase M-1) ────────────────────────────────────
-  const [temporaryTerms, setTemporaryTerms] = useState([]);
-  const [isLoadingTempDict, setIsLoadingTempDict] = useState(false);
-  const [tempDictError, setTempDictError] = useState(null);
-
-  useEffect(() => {
-    getTemporaryTerms()
-      .then(data => setTemporaryTerms(data.terms ?? []))
-      .catch(() => {});
-  }, []);
-
+  // ─── temporary辞書: Proofreader の直接登録フロー向け最小ハンドラ ──────────
   const handleRegisterTemporaryTerm = async (termData) => {
-    setIsLoadingTempDict(true);
-    setTempDictError(null);
-    try {
-      await registerTemporaryTerm(termData);
-      const data = await getTemporaryTerms();
-      setTemporaryTerms(data.terms ?? []);
-    } catch (err) {
-      setTempDictError(err.message);
-      throw err; // SettingsSidebar 側でも受け取れるよう再スロー
-    } finally {
-      setIsLoadingTempDict(false);
-    }
-  };
-
-  const handleToggleTemporaryTerm = async (term, enabled) => {
-    setIsLoadingTempDict(true);
-    setTempDictError(null);
-    try {
-      await toggleTemporaryTerm(term, enabled);
-      const data = await getTemporaryTerms();
-      setTemporaryTerms(data.terms ?? []);
-    } catch (err) {
-      setTempDictError(err.message);
-    } finally {
-      setIsLoadingTempDict(false);
-    }
+    await registerTemporaryTerm(termData);
   };
 
   // ─── App config (Phase 3C: frontend 唯一の正本。初回マウントは getAppConfig() のみ) ──
@@ -973,11 +938,6 @@ function App() {
             onFlushEvents={flushToBackend}
             onOcrSettingChange={handleOcrSettingChange}
             onDictionarySettingChange={handleDictionarySettingChange}
-            temporaryTerms={temporaryTerms}
-            isLoadingTempDict={isLoadingTempDict}
-            tempDictError={tempDictError}
-            onRegisterTemporaryTerm={handleRegisterTemporaryTerm}
-            onToggleTemporaryTerm={handleToggleTemporaryTerm}
             appConfig={appConfig}
             configStatus={configStatus}
             onConfigUpdate={handleConfigUpdate}

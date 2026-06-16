@@ -400,7 +400,7 @@ body {
   border: 1px solid var(--border);
   border-radius: 8px;
   width: 92vw;
-  max-width: 1200px;
+  max-width: 1000px;
   max-height: calc(100vh - 90px);
   display: flex;
   flex-direction: column;
@@ -431,7 +431,7 @@ body {
 .settings-modal-inner input[type="range"],
 .settings-modal-inner .view-mode-toggle-compact,
 .settings-modal-inner .setting-export-row,
-.settings-modal-inner .setting-item > .btn {
+.settings-modal-inner .setting-item>.btn {
   max-width: 400px;
 }
 
