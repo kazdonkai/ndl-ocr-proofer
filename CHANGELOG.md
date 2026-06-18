@@ -8,31 +8,72 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
-## [Unreleased] — 1.1.3
+## [Unreleased]
+
+---
+
+## [1.1.3] — 2026-06-18
 
 ### Summary / 概要
 
-production 起動整備と実運用・観測フェーズ V2 の準備。  
-`./start.sh --prod` により、フロントエンドをビルドして FastAPI が単一プロセスで静的配信する本番起動モードを実装した。  
-ドキュメント（README / user guide / acceptance scenarios）を dev / prod 両モードに対応する形に整備した。
+production 起動整備・Obsidian Bridge Plugin 正式同梱・UI 整理を含む機能追加リリース。  
+`./start.sh --prod` で FastAPI が単一プロセスでフロントエンドを配信する本番起動モードを実装した。  
+Obsidian Bridge Plugin を `v1.1.3` として正式同梱し、SSE bridge 経由でノート切替を実現。  
+辞書管理 UI・Settings パネルを整理し、アプリ名を「影印校エディタ」に統一した。
 
-This release adds a production startup mode via `./start.sh --prod`, which builds the frontend  
-and serves it from FastAPI as a single-process setup. Documentation has been restructured  
-to cover both dev and prod startup flows clearly.
+This release adds production startup mode (`./start.sh --prod`), formally ships the Obsidian Bridge Plugin  
+at v1.1.3 with SSE bridge note-switching, reorganizes the dictionary management and settings UI,  
+and renames the app to "影印校エディタ" for public release.
 
 ### Added / 追加
 
 - **Obsidian Bridge Plugin 正式リリース** (`obsidian-plugin/`): Obsidian のファイルメニュー・エディタメニュー・コマンドパレットから「Open in OCR Proofer」を実行し、起動中の影印校エディタに SSE bridge 経由でノートを切り替える機能。`reuse-existing`（SSE bridge 再利用、推奨）/ `always-new`（常に新しいタブ）の 2 モード対応。plugin バージョンを本体に合わせ `1.1.3` とし、`main.js` を配付成果物として追跡する構成に変更。
 
-- **production 起動モード** (`start.sh`): `./start.sh --prod` でフロントエンドを `npm run build` によりビルドし、FastAPI（port 8000）が静的ファイルをまとめて配信する 1 プロセス構成で起動するモードを追加。`--reload` なし・Vite dev server 不要。アクセス URL: `http://localhost:8000`。
+- **SSE bridge API** (`backend/main.py`): plugin からノート切替を受け取り、接続中ブラウザタブへ配信する SSE bridge を実装。エンドポイント 3 本: `GET /api/bridge/events`（ブラウザタブ SSE 接続）・`POST /api/bridge/open`（plugin からの切替命令）・`POST /api/bridge/current-note`（タブが表示中ノートを報告）。インメモリ管理・ローカル専用。
+
+- **SSE bridge フロントエンドクライアント** (`frontend/src/App.jsx`): `EventSource` を起動時に接続し、`open-note` イベントでドキュメントを自動切替。`bridgeClientId` と `currentNote` を backend に報告し、`reuse-same-note`（always-new モード）の重複防止に使用。
+
+- **production 起動モード** (`start.sh`): `./start.sh --prod` でフロントエンドを `npm run build` によりビルドし、FastAPI（port 8000）が静的ファイルをまとめて配信する 1 プロセス構成で起動するモードを追加。`--reload` なし・Vite dev server 不要。
+
 - **`logs/app.mode` によるモード記録**: `--prod` / `dev` の起動モードをファイルに記録し、`./start.sh --status` が prod/dev を区別して表示するように変更。
-- **フロントエンド静的配信ゲート** (`backend/main.py`): `SERVE_FRONTEND=true` 環境変数が渡された場合のみ `/assets` mount と SPA catch-all ルートを有効化。dist ルート直下の静的ファイル（`favicon.svg` 等）も配信。`/api/*` / `/docs` / `/openapi.json` は SPA に飲み込まれない設計。
+
+- **フロントエンド静的配信ゲート** (`backend/main.py`): `SERVE_FRONTEND=true` 環境変数が渡された場合のみ `/assets` mount と SPA catch-all ルートを有効化。`/api/*` / `/docs` / `/openapi.json` は SPA に飲み込まれない設計。
+
+- **Settings オーバーレイモーダル** (`SettingsSidebar.jsx`, `App.css`): Settings パネルをサイドバーからオーバーレイモーダルに変換（DictionaryManager と同パターン、z-index 400）。ESC キーで閉じる対応。
+
+- **辞書ファイルリネーム** (`PATCH /api/dictionary/files/{type}/{filename}`, `DictionaryManager.jsx`): temporary・approval 両辞書のファイルをバックアップ付きでリネームする API と RenameFileDialog UI を追加。`user_manual_temporary.csv` のリネームはデフォルトファイル保護により拒否。
+
+- **「Obsidianで開く」ボタン** (`frontend/src/utils/obsidianUri.js`): ヘッダーに追加したボタンから現在表示中のノートを `obsidian://open?vault=…&file=…` URI でワンクリック起動。Vault 名は設定またはパスの末尾から自動導出。日本語・スペース含みパスは `encodeURIComponent` でエンコード。
+
+### Changed / 変更
+
+- **temporary dict UI を DictionaryManager に移動**: temporary 辞書の登録フォームと一覧を SettingsSidebar から DictionaryManager モーダルに移動。Settings パネルの肥大化を解消。
+
+- **辞書エクスポート・インポートコントロールを Settings に移動**: 以前ヘッダー付近にあったエクスポート・インポートボタンを Settings オーバーレイ内に統合。
+
+- **アプリ名を「影印校エディタ」に変更**: `App.jsx` h1・`index.html` title・`README.md`・`README.en.md` の表記を "Classical OCR Proofer" / "NDL OCR Proofer" から「影印校エディタ」に統一（パブリックリポジトリ公開準備）。
+
+- **`base.csv` をコア承認辞書として採用**: `test.csv` を `base.csv` に改名し、研究プロジェクト非依存の基盤辞書として 8 件のエントリを追加。`docs/user_guide.md` / `docs/acceptance_scenarios.md` の例示を `base.csv` に合わせて更新。
+
+### Fixed / 修正
+
+- **`start.sh --stop` の複数 PID kill バグ**: `uvicorn --reload` が master + reloader の 2 プロセスを起動するため、同一ポートに複数 PID が存在する場合に `kill` が失敗していた問題を修正。`while read` ループで各 PID を個別に kill するよう変更。
 
 ### Documentation / ドキュメント
 
-- **README.md Quick Start 再構成**: 依存インストール（初回のみ）と起動コマンド（dev / prod）を分離し、両モードのアクセス URL とプロセス構成を明記。ローカル専用（`127.0.0.1`）の制約を明示。
-- **`docs/user_guide.md` 更新**: URL 誤り修正（5173 → 5176）、起動セクションを dev / prod / 停止の 3 段構成に整理。
-- **`docs/acceptance_scenarios.md` 更新**: production モード受け入れ確認チェックリスト（9 項目）と範囲外一覧を追記。
+- **`docs/RELEASE.md` 追加**: リリース手順書（唯一の参照先）。Step 1〜6 のチェックリスト、よくある失敗パターンと対処、release:check 期待出力を網羅。
+
+- **`docs/plugin-bridge-guide.md` 追加**: bridge plugin 変更時の最短手順書。変更カテゴリ別の発動条件・CI failure 対応表・Vault への反映手順を記載。
+
+- **`.github/workflows/plugin-check.yml` 追加**: push / PR で自動実行される plugin 整合・成果物チェック CI。バージョン整合（`check:version`）と配付成果物の存在・非空確認（`check:dist`）を実行。
+
+- **`CLAUDE.md` 追加**: Claude Code 作業ルール。bridge plugin 変更時の完了条件（3点セット: README更新・バージョン更新・配付4ファイル更新）と release:check 発動条件を定義。
+
+- **README.md / README.en.md 更新**: macOS 専用動作注記、bridge plugin セクション追加、obsidian-plugin/ ディレクトリの説明更新。サンプル画像・引用追加。
+
+- **`docs/acceptance_scenarios.md` 更新**: production モード受け入れ確認（9 項目）・シナリオ 9（temp 登録なし基本校正）・シナリオ 10（ファイルリネーム）・bridge plugin B シナリオ（B1〜B7）を追加。
+
+- **`docs/user_guide.md` 更新**: URL 誤り修正（5173 → 5176）、起動セクションを dev / prod / 停止の 3 段構成に整理。リネームボタン可視条件・`user_manual_temporary.csv` リネーム制限・stale エントリ挙動・`base.csv` 利用パターンを追記。
 
 ---
 
