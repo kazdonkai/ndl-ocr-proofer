@@ -22,6 +22,8 @@ to cover both dev and prod startup flows clearly.
 
 ### Added / 追加
 
+- **Obsidian Bridge Plugin 正式リリース** (`obsidian-plugin/`): Obsidian のファイルメニュー・エディタメニュー・コマンドパレットから「Open in OCR Proofer」を実行し、起動中の影印校エディタに SSE bridge 経由でノートを切り替える機能。`reuse-existing`（SSE bridge 再利用、推奨）/ `always-new`（常に新しいタブ）の 2 モード対応。plugin バージョンを本体に合わせ `1.1.3` とし、`main.js` を配付成果物として追跡する構成に変更。
+
 - **production 起動モード** (`start.sh`): `./start.sh --prod` でフロントエンドを `npm run build` によりビルドし、FastAPI（port 8000）が静的ファイルをまとめて配信する 1 プロセス構成で起動するモードを追加。`--reload` なし・Vite dev server 不要。アクセス URL: `http://localhost:8000`。
 - **`logs/app.mode` によるモード記録**: `--prod` / `dev` の起動モードをファイルに記録し、`./start.sh --status` が prod/dev を区別して表示するように変更。
 - **フロントエンド静的配信ゲート** (`backend/main.py`): `SERVE_FRONTEND=true` 環境変数が渡された場合のみ `/assets` mount と SPA catch-all ルートを有効化。dist ルート直下の静的ファイル（`favicon.svg` 等）も配信。`/api/*` / `/docs` / `/openapi.json` は SPA に飲み込まれない設計。

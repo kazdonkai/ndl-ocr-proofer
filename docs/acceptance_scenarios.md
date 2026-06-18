@@ -216,3 +216,99 @@
 - `../escape.csv` など `..` を含む新名称 → バリデーションエラー
 - 同名ファイルが既に存在する → 409 エラー
 - `.csv` 以外の拡張子を明示的に指定 → バリデーションエラー
+
+---
+
+## Obsidian Bridge Plugin 受け入れ確認
+
+追加日: 2026-06-17  
+対応バージョン: v1.1.3 以降  
+前提: `./start.sh --prod` でアプリが起動しており、`http://localhost:8000` で動作していること。
+
+> リリース時の確認手順は [docs/RELEASE.md](RELEASE.md) を参照してください。  
+> 以下は個別シナリオの詳細です。
+
+### シナリオ B1: reuse-existing モード — 初回（タブなし）
+
+**操作手順**
+1. ブラウザ上の影印校エディタをすべて閉じる
+2. Obsidian でノート（`.md` ファイル）を開く
+3. ファイルエクスプローラーで右クリック → 「Open in OCR Proofer」
+
+**期待結果**
+- `POST /api/bridge/open` が呼ばれ、`delivered: false` が返る
+- ブラウザに新しいタブが開き、`http://localhost:8000/?note=<path>` にアクセスされる
+- 影印校エディタが起動し対象ノートが表示される
+- Obsidian に「影印校エディタを新しく開きました」の Notice が表示される
+
+---
+
+### シナリオ B2: reuse-existing モード — 既存タブあり（最重要）
+
+**操作手順**
+1. ブラウザで影印校エディタを開いておく（SSE 接続状態）
+2. Obsidian で **別のノート** を「Open in OCR Proofer」
+
+**期待結果**
+- `POST /api/bridge/open` が呼ばれ、`delivered: true` が返る
+- **既存タブのまま** 対象ノートに切り替わる（新しいタブは開かない）
+- Obsidian に「既存の影印校エディタにノートを切り替えました」の Notice が表示される
+
+**NG ケース**
+- 新しいタブが開いてしまう → SSE bridge が機能していない（backend 起動確認・タブの SSE 接続確認）
+
+---
+
+### シナリオ B3: always-new モード
+
+**操作手順**
+1. Obsidian → 設定 → OCR Proofer Bridge → 起動モードを「常に新しいタブを開く」に変更
+2. 「Open in OCR Proofer」を複数回実行
+
+**期待結果**
+- 毎回新しいブラウザタブが開く
+- SSE bridge への通信は発生しない（`/api/bridge/open` は呼ばれない）
+- 既存タブが開いていても無視される
+
+---
+
+### シナリオ B4: same-note 重複
+
+**操作手順**
+1. ブラウザで影印校エディタにノート A が開いている状態にする
+2. Obsidian でノート A を「Open in OCR Proofer」（同じノート）
+
+**期待結果**
+- エラー・クラッシュなしで動作する
+- `delivered: true` が返り、同じノートが再表示される（または変化なし）
+- Obsidian の Notice がいずれかの文言で表示される
+
+---
+
+### シナリオ B5: サーバー停止時の fallback
+
+**操作手順**
+1. `./start.sh --stop` でアプリを停止する
+2. 「Open in OCR Proofer」を実行する（`reuse-existing` モード）
+
+**期待結果**
+- `fetch` 失敗（接続エラー）が発生する
+- 新しいブラウザタブを開こうとする（fallback 動作）
+- Obsidian に「既存タブへの通知に失敗したため、新しいタブを開きました」の Notice が表示される
+
+---
+
+### シナリオ B6: plugin 更新後の OFF → ON
+
+**操作手順**
+1. `obsidian-plugin/main.js` を更新（新バージョンのビルド成果物に差し替え）
+2. Obsidian → 設定 → コミュニティプラグイン → OCR Proofer Bridge → **OFF → ON**
+3. 「Open in OCR Proofer」を実行する
+
+**期待結果**
+- 新バージョンの plugin が正常に動作する
+- 設定（サーバー URL・起動モード）が引き継がれる（Obsidian の `data.json` は保持される）
+
+**注意**
+- ファイル差し替えだけでは新バージョンが反映されない。必ず OFF → ON を実施すること。
+- Obsidian を再起動した場合は OFF → ON は不要（起動時に最新バイナリを読み込む）。

@@ -1,76 +1,233 @@
-# OCR Proofer（Obsidian プラグイン / Plugin）
+# OCR Proofer Bridge（Obsidian プラグイン）
 
-古典籍 OCR テキストを Obsidian 内から校正するためのプラグインです。  
-An [Obsidian](https://obsidian.md) plugin for proofreading OCR-transcribed historical Japanese documents.
+影印校エディタと Obsidian を接続する **Bridge Plugin** です。
 
-> **開発状況 / Status**: このプラグインは **v1.5+** での正式対応を予定しています。現バージョン (v1.0) のメイン UI はスタンドアロン Web フロントエンド (`frontend/`) です。  
-> This plugin is planned for **v1.5+**. The primary UI in v1.0 is the standalone web frontend (`frontend/`).
+> **このプラグインは単体では完結しません。**  
+> [影印校エディタ](../README.md)（proofreading-app）の backend / frontend が起動していることが前提です。
 
-## Overview / 概要
+---
 
-OCR Proofer provides a side-panel view that links a source document (Markdown, plain text, or JSON) with its associated scan image and OCR data files, allowing you to proofread transcriptions without switching tabs.
+## このプラグインの役割
 
-**Current status: v0.1.0 — placeholder UI.** The file resolver and settings are fully implemented. The proofreading panel currently shows a placeholder; side-by-side document/image display will be added in a future release when the React UI is mounted.
+Obsidian でノートを右クリック → 「**Open in OCR Proofer**」を実行すると、
+起動中の影印校エディタ（ブラウザ上の Web アプリ）に対象ノートを受け渡します。
 
-## Features
+- **SSE bridge** 経由で既存タブにノートを切り替える（`reuse-existing` モード）
+- または常に新しいタブで開く（`always-new` モード）
 
-- Resolves related files (source document, scan image, OCR data, correction log) via three configurable strategies: frontmatter keys, basename matching, or folder scan
-- File-explorer and editor context-menu entries: **Open in OCR Proofer**
-- Command palette: **Open OCR Proofer** / **Open active file in OCR Proofer**
-- Configurable resolution priority and per-slot required-file warnings
+OCR の確認・候補選択・保存はすべてブラウザ側の影印校エディタで行います。  
+Obsidian 内に OCR テキストや校正 UI を表示する機能はこのプラグインには含まれません。
 
-## Supported File Types
+---
 
-| Role | Extensions |
-|---|---|
-| Source document | `.md`, `.txt`, `.json` |
-| Scan image | `.png`, `.jpg`, `.jpeg`, `.tif`, `.tiff`, `.webp`, `.gif` |
-| OCR data | `.json` |
-| Correction log | `.csv`, `.log` |
+## 必要なもの
 
-> **Note on `.json`:** `.json` appears in both the source-document list and the OCR-data list. When you open a `.json` file directly, OCR Proofer treats it as the source document and looks for a paired image alongside it.
+| 依存 | バージョン |
+|------|-----------|
+| Obsidian | 1.5.7 以上 |
+| 影印校エディタ backend | proofreading-app v1.1.3 以上 |
+| macOS | 必須（影印校エディタ本体が macOS 専用） |
 
-## Installation
+---
 
-### Manual (recommended for now)
+## 影印校エディタのセットアップと起動
 
-1. Download `main.js`, `manifest.json`, and `styles.css` from the latest release.
-2. Copy them into `<your-vault>/.obsidian/plugins/ocr-proofer/`.
-3. Enable **OCR Proofer** under **Settings → Community Plugins**.
+プラグインを使用する前に、影印校エディタが起動している必要があります。
 
-### BRAT
+```bash
+git clone <repo-url> proofreading-app
+cd proofreading-app
 
-Add this repository in [BRAT](https://github.com/TfTHacker/obsidian42-brat) for automatic updates once the repository is published.
+# 初回: 設定ファイル作成
+cp backend/.env.example backend/.env   # VAULT_ROOT を自分の Vault パスに設定
+cp app.toml.example app.toml
 
-## Configuration
+# 初回: 依存インストール
+cd backend && python3 -m venv .venv && . .venv/bin/activate && pip install -r requirements.txt && cd ..
+cd frontend && npm install && cd ..
 
-Open **Settings → OCR Proofer** to configure the resolver.
+# 推奨起動方法（production モード: 1 プロセス、port 8000）
+./start.sh --prod
+```
 
-| Setting | Default | Description |
-|---|---|---|
-| Image frontmatter key | `ocr_image` | Front matter key pointing to the scan image path |
-| OCR data frontmatter key | `ocr_data` | Front matter key pointing to the OCR JSON file path |
-| Correction log frontmatter key | `correction_log` | Front matter key pointing to the correction log path |
-| Resolution priority | `frontmatter, basename, folder-scan` | Ordered list of strategies to try |
-| Image required | on | Warn when no image file is found |
-| OCR data required | on | Warn when no OCR data file is found |
-| Correction log required | off | Warn when no correction log is found |
+`http://localhost:8000` にアクセスして影印校エディタが表示されることを確認してから、このプラグインを使用してください。
 
-## Resolution Strategies
+### 起動モード早見表
 
-1. **frontmatter** — reads file paths from the document's YAML front matter using the configured keys
-2. **basename** — looks for sibling files sharing the same stem (e.g. `page01.md` → `page01.png`)
-3. **folder-scan** — scans the document's folder for any file with a matching extension
+| コマンド | アクセス URL | 用途 |
+|----------|-------------|------|
+| `./start.sh --prod` | `http://localhost:8000` | **推奨**。FastAPI が frontend をまとめて配信する 1 プロセス構成 |
+| `./start.sh` | `http://localhost:5176` | 開発時。backend (8000) + Vite dev server (5176) の 2 プロセス |
 
-## Known Limitations
+プラグインの「サーバー URL」設定は起動モードに合わせて変更してください（既定値: `http://localhost:8000`）。
 
-- **Placeholder UI:** The proofreading panel does not yet display the document or image. This is the primary missing feature in v0.1.0.
-- **Desktop only:** `isDesktopOnly: true`. Mobile support is not planned for the current milestone.
-- **Not yet listed** in the Obsidian Community Plugins directory.
+---
 
-## Requirements
+## インストール
 
-- Obsidian **1.5.7** or later
+### 手動インストール（推奨）
+
+1. 最新リリースから以下のファイルをダウンロードします:
+   - `main.js`
+   - `manifest.json`
+   - `styles.css`
+2. Vault の `.obsidian/plugins/ocr-proofer/` ディレクトリを作成し、3 ファイルをコピーします。
+3. Obsidian → **設定 → コミュニティプラグイン** でプラグインリストを更新し、**OCR Proofer Bridge** を有効化します。
+
+### ソースからビルドしてインストール（開発用）
+
+proofreading-app リポジトリを clone した環境でビルドできます。
+
+```bash
+cd obsidian-plugin
+npm install
+npm run dev   # .obsidian/plugins/ocr-proofer/main.js に直接出力
+```
+
+`npm run dev` は `esbuild.config.mjs` に記載されているパスへ出力します。  
+パスが自分の Vault と一致しているか確認してください。
+
+---
+
+## 設定
+
+Obsidian の **設定 → OCR Proofer Bridge** から設定できます。
+
+### 起動設定
+
+| 設定 | 既定値 | 説明 |
+|------|--------|------|
+| サーバー URL | `http://localhost:8000` | 影印校エディタのベース URL |
+| 起動モード | 既存タブを再利用 | ノートの受け渡し方法 |
+
+### 起動モード詳細
+
+| モード | 動作 |
+|--------|------|
+| **既存タブを再利用**（`reuse-existing`） | SSE bridge 経由で既存の影印校エディタにノートを切り替えます。タブが開いていない場合のみ新しいタブを開きます。通常の校正作業に推奨。 |
+| **常に新しいタブを開く**（`always-new`） | 毎回ブラウザの新しいタブで影印校エディタを開きます。SSE bridge を使用しないため、起動確認なしで動作します。 |
+
+#### `reuse-existing` の動作フロー
+
+```
+1. Obsidian で「Open in OCR Proofer」を実行
+2. Plugin が POST /api/bridge/open を呼び出す
+3. 既存タブが SSE 接続中（delivered: true）→ そのタブでノートが切り替わる
+4. タブが開いていない（delivered: false）→ 新しいタブを開く
+5. サーバー接続自体に失敗した場合も → 新しいタブを開く
+```
+
+### RESOLVER 設定
+
+ファイル解決戦略の設定です。通常はデフォルトのままで問題ありません。
+
+| 設定 | 既定値 | 説明 |
+|------|--------|------|
+| Image frontmatter key | `ocr_image` | 画像ファイルパスを持つ frontmatter キー |
+| OCR data frontmatter key | `ocr_data` | OCR データファイルパスを持つ frontmatter キー |
+| Correction log frontmatter key | `correction_log` | 校正ログファイルパスを持つ frontmatter キー |
+| Resolution priority | `body-callout, frontmatter, basename, folder-scan` | 解決ステップの優先順位 |
+
+---
+
+## 使い方
+
+影印校エディタが起動している状態で:
+
+- **ファイルエクスプローラーで右クリック** → 「Open in OCR Proofer」
+- **エディタ上で右クリック** → 「Open current file in OCR Proofer」
+- **コマンドパレット**（`Cmd+P`）→ 「Open active file in OCR Proofer」
+- **リボンアイコン**（scan-text）→ プラグインパネルを開く
+
+対応ファイル形式: `.md` / `.txt` / `.json`
+
+---
+
+## 更新後の注意
+
+プラグインファイル（`main.js` 等）を更新した後は、Obsidian の **設定 → コミュニティプラグイン** で
+プラグインを一度 **OFF → ON** してください。
+
+Obsidian はプラグインを起動時にロードするため、ファイルを差し替えるだけでは新バージョンが反映されません。
+
+---
+
+## バージョン対応
+
+このプラグインのバージョンは **proofreading-app 本体のバージョンと合わせています**。
+
+| Plugin バージョン | proofreading-app バージョン | 主な内容 |
+|------------------|---------------------------|----------|
+| 1.1.3 | 1.1.3 | Bridge plugin 正式リリース。SSE bridge・reuse-existing モード実装。 |
+| 0.1.0 | — | 初期プロトタイプ（プレースホルダー UI のみ、動作しない） |
+
+bridge API（`/api/bridge/open`）の仕様は proofreading-app backend に依存します。  
+**plugin のバージョンと backend のバージョンは一致させて使用してください。**
+
+---
+
+## 開発・ビルド手順
+
+```bash
+cd obsidian-plugin
+npm install
+
+# 開発ビルド（.obsidian/plugins/ocr-proofer/main.js に直接出力、inline sourcemap 付き）
+npm run dev
+
+# 配付用ビルド（このディレクトリの main.js を更新、sourcemap なし）
+npm run build
+```
+
+### 配付成果物
+
+`npm run build` 実行後、以下のファイルが配付成果物の全体です:
+
+```
+obsidian-plugin/
+├── main.js          ← npm run build で生成（ここに上書きされる）
+├── manifest.json
+├── versions.json
+└── styles.css
+```
+
+これら 4 ファイルを Vault の `.obsidian/plugins/ocr-proofer/` にコピーすれば
+プラグインを導入できます。
+
+---
+
+## ファイル構成
+
+```
+obsidian-plugin/
+├── main.ts              # Plugin エントリポイント
+├── resolver.ts          # Re-export facade（src/ への窓口）
+├── src/
+│   ├── core/            # Obsidian 非依存のコアロジック（型・設定・解決戦略）
+│   └── obsidian/        # Obsidian API を使用するアダプター
+├── esbuild.config.mjs   # ビルド設定
+├── manifest.json        # Obsidian plugin マニフェスト
+├── versions.json        # plugin バージョンと Obsidian 最低バージョンの対応表
+├── styles.css           # プラグインスタイル（サイドパネル用）
+├── tsconfig.json
+├── package.json
+└── main.js              # 配付成果物（npm run build で生成）
+```
+
+---
+
+## プロジェクト内での位置づけ
+
+このプラグインは [proofreading-app](../README.md) リポジトリに同梱されています。
+
+| 項目 | 内容 |
+|------|------|
+| 開発の正本 | proofreading-app リポジトリ（この `obsidian-plugin/` ディレクトリ） |
+| メイン UI | proofreading-app の standalone web app（`frontend/`） |
+| このプラグインの役割 | bridge のみ（Obsidian → web app へのノート受け渡し） |
+| 別リポジトリ化 | 現時点では未実施。将来切り出せるようにビルド・配付は独立して完結する設計にしています |
+
+---
 
 ## License
 

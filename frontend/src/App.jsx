@@ -111,6 +111,12 @@ function App() {
   // the ref is written once per render (safe for a setter, which is stable),
   // and onDocumentLoaded reads it asynchronously after fetch completes.
   const setCurrentPageRef = useRef(() => {});
+  // SSE bridge: always holds the latest handleLoadDocument (defined below).
+  const handleLoadDocumentRef = useRef(null);
+  // SSE bridge: client id assigned by backend on connect (for current-note reporting).
+  const bridgeClientIdRef = useRef(null);
+  // Mirrors docId so the SSE effect ([] deps) can read the latest value without stale closure.
+  const docIdForBridgeRef = useRef('');
 
   // ─── Document open pipeline ──────────────────────────────────────────────
   // openDocument / openDocumentById / openDocumentByPath are the single entry
@@ -158,6 +164,7 @@ function App() {
   // useLayoutEffect runs synchronously after DOM mutations, ensuring the ref is
   // current before any async onDocumentLoaded callback can fire.
   useLayoutEffect(() => { setCurrentPageRef.current = setCurrentPage; });
+  useLayoutEffect(() => { docIdForBridgeRef.current = docId; });
 
   // ─── Import state ────────────────────────────────────────────────────────
   const [isImporting, setIsImporting] = useState(false);
@@ -648,6 +655,55 @@ function App() {
   };
 
   // ─── Effects ──────────────────────────────────────────────────────────────
+  // Keep handleLoadDocumentRef current so the SSE callback below always has
+  // the latest version without recreating the EventSource on every render.
+  useLayoutEffect(() => { handleLoadDocumentRef.current = handleLoadDocument; });
+
+  // Bridge note reporter: fire-and-forget POST so backend knows this tab's current note.
+  // Used for reuse-same-note logic (always-new mode duplicate suppression).
+  // Ref pattern: assigned on every render so it always captures latest bridgeClientIdRef.
+  const reportCurrentNoteRef = useRef(null);
+  reportCurrentNoteRef.current = (note) => {
+    if (!bridgeClientIdRef.current || !note) return;
+    const base = import.meta.env.DEV ? 'http://127.0.0.1:8000' : '';
+    fetch(`${base}/api/bridge/current-note`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ clientId: bridgeClientIdRef.current, note }),
+    }).catch(() => {});
+  };
+
+  // SSE bridge: receive open-note events from the plugin via the backend.
+  // In dev mode (Vite proxy), SSE can be unreliable; connect to the backend directly.
+  useEffect(() => {
+    const base = import.meta.env.DEV ? 'http://127.0.0.1:8000' : '';
+    const url = `${base}/api/bridge/events`;
+    const es = new EventSource(url);
+    es.addEventListener('open', () => console.log('[bridge] SSE connected:', url));
+    es.addEventListener('error', (e) => console.warn('[bridge] SSE error:', e));
+    es.addEventListener('connected', (e) => {
+      try {
+        const { clientId } = JSON.parse(e.data);
+        if (clientId) {
+          bridgeClientIdRef.current = clientId;
+          // Report already-loaded note (handles tabs that loaded before SSE connected).
+          if (docIdForBridgeRef.current) reportCurrentNoteRef.current?.(docIdForBridgeRef.current);
+        }
+      } catch {}
+    });
+    es.addEventListener('open-note', (e) => {
+      try {
+        const { note } = JSON.parse(e.data);
+        if (note) {
+          handleLoadDocumentRef.current?.(note);
+          reportCurrentNoteRef.current?.(note);
+        }
+      } catch {}
+    });
+    return () => es.close();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Sync page jump input when currentPage changes externally
   useEffect(() => { setPageInputValue(String(currentPage + 1)); }, [currentPage]);
 
@@ -664,6 +720,18 @@ function App() {
   }, [documentData?.doc_id]);
 
   useEffect(() => { openDocument(docId); }, []);
+
+  // Obsidian bridge plugin: ?note= param からドキュメントを自動ロード
+  useEffect(() => {
+    const note = new URLSearchParams(window.location.search).get('note');
+    if (note) handleLoadDocument(note);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // docId が変わるたびに backend へ現在ノートを通知（always-new 重複防止用）。
+  // bridgeClientId 未取得のうちは reportCurrentNoteRef 内でガード済み。
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (docId) reportCurrentNoteRef.current?.(docId); }, [docId]);
 
   useEffect(() => {
     if (settings.panel.openOnStartup) vaultFiles.loadFileList();

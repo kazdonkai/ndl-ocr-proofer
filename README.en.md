@@ -4,6 +4,9 @@
 
 [日本語](README.md) | English
 
+> **Platform: macOS only**
+> This application runs on **macOS only**. `ndlkotenocr-lite`, the OCR engine used by this app, does not support Windows, so Windows is not a supported platform.
+
 影印校エディタ is a proofreading assistant for researchers who need to review, correct, and record OCR text generated from Japanese vertical historical materials, including outputs from NDL Koten OCR.
 
 OCR output from historical sources such as manuscripts, classical books, early modern documents, and vertically written research materials cannot usually be used as research-ready text without careful review. Character misrecognition, place names, personal names, historical terminology, old character forms, and vertical writing conventions all require comparison with the original images.
@@ -94,6 +97,7 @@ The main user interface is currently a standalone web application that runs in t
 
 ### Basic Environment
 
+- **macOS** (Windows is not supported)
 - Python 3.11+
 - Node.js 18+
 - Obsidian
@@ -295,6 +299,7 @@ This roadmap summarizes the current development status.
 
 ## Current Limitations
 
+- **This application runs on macOS only.** `ndlkotenocr-lite` does not support Windows, so Windows is not a supported platform.
 - The main UI is currently a standalone web application. Embedded use as an Obsidian plugin is planned for a future version.
 - OCR execution requires a separate `ndlkotenocr-lite` setup.
 - Existing OCR text can be proofread without OCR execution, but image and OCR file conventions depend on each user's Vault structure.

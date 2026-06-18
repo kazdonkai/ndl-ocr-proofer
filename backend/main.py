@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import os
@@ -8,9 +9,10 @@ from typing import Any
 from dotenv import load_dotenv
 from fastapi import Body, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from urllib.parse import unquote
+import uuid
 import uvicorn
 
 logger = logging.getLogger(__name__)
@@ -161,6 +163,94 @@ def _write_toml_atomically(path: Path, content: str) -> None:
         except OSError:
             pass
         raise
+
+# ── SSE ブリッジ (plugin → browser tab 通知) ──────────────────────────────────
+# インメモリ管理。シングルユーザー・ローカル環境専用。永続化なし。
+# client_id → {"queue": asyncio.Queue, "note": str (現在表示中のノートパス)}
+
+_bridge_clients: dict[str, dict] = {}
+
+
+@app.get("/api/bridge/events")
+async def bridge_events():
+    """ブラウザタブが SSE 接続を維持するエンドポイント。
+    接続ごとに UUID を発行し、first event (connected) で clientId を通知する。
+    asyncio.wait_for は Python バージョンにより CancelledError を誤処理するため使わない。
+    """
+    client_id = str(uuid.uuid4())
+    queue: asyncio.Queue = asyncio.Queue()
+    _bridge_clients[client_id] = {"queue": queue, "note": ""}
+    logger.info("[bridge] SSE client connected  id=%s total=%d", client_id, len(_bridge_clients))
+
+    async def event_generator():
+        try:
+            yield f"event: connected\ndata: {json.dumps({'clientId': client_id})}\n\n"
+            while True:
+                msg = await queue.get()
+                yield msg
+        except (asyncio.CancelledError, GeneratorExit):
+            pass
+        finally:
+            _bridge_clients.pop(client_id, None)
+            logger.info("[bridge] SSE client disconnected id=%s total=%d", client_id, len(_bridge_clients))
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@app.post("/api/bridge/open")
+async def bridge_open(payload: dict = Body(...)):
+    """Plugin から note 切替を受け取り、接続中タブへ SSE で転送する。
+    mode:
+      reuse-any       – 全接続タブへ配信（reuse-existing モード用）
+      reuse-same-note – 同じ note を表示中のタブのみへ配信（always-new モード用）
+    """
+    vault = payload.get("vault", "")
+    note  = payload.get("note", "")
+    name  = payload.get("name", "")
+    mode  = payload.get("mode", "reuse-any")
+
+    logger.info("[bridge] POST /open note=%s mode=%s clients=%d", note, mode, len(_bridge_clients))
+
+    if not _bridge_clients:
+        return {"delivered": False}
+
+    data    = json.dumps({"vault": vault, "note": note, "name": name}, ensure_ascii=False)
+    message = f"event: open-note\ndata: {data}\n\n"
+
+    if mode == "reuse-same-note":
+        targets = [c for c in _bridge_clients.values() if c["note"] == note]
+        if not targets:
+            return {"delivered": False}
+        for client in targets:
+            await client["queue"].put(message)
+        return {"delivered": True}
+
+    # reuse-any: 全接続タブへ配信
+    for client in _bridge_clients.values():
+        await client["queue"].put(message)
+    return {"delivered": True}
+
+
+@app.post("/api/bridge/current-note")
+async def bridge_set_current_note(payload: dict = Body(...)):
+    """ブラウザタブが現在表示中の note を backend に通知する。
+    always-new モードの same-note 検索（reuse-same-note）に使用。
+    """
+    client_id = payload.get("clientId", "")
+    note      = payload.get("note", "")
+    client    = _bridge_clients.get(client_id)
+    if client is not None:
+        client["note"] = note
+        logger.debug("[bridge] current-note updated client=%s note=%s", client_id, note)
+    return {"ok": True}
+
 
 @app.get("/api/document/{doc_id:path}")
 async def get_document(doc_id: str):

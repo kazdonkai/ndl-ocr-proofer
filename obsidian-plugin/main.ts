@@ -18,21 +18,33 @@ const SUPPORTED_EXTENSIONS = new Set(['md', 'txt', 'json']);
 // Top-level wrapper ready for additional sections (e.g. display, keybindings).
 // Stored via Plugin.loadData() / Plugin.saveData() for Obsidian persistence.
 
+export type LaunchMode = 'reuse-existing' | 'always-new';
+
 export interface OcrProoferSettings {
   resolver: ResolverSettings;
+  /** Base URL of the running proofreading app (default: http://localhost:8000). */
+  serverUrl: string;
+  /**
+   * How to open the proofreading editor when a file is sent from Obsidian.
+   *  reuse-existing  – POST to /api/bridge/open; open new tab only if no tab is listening.
+   *  always-new      – always open a new browser tab (SSE bridge not used).
+   */
+  launchMode: LaunchMode;
 }
 
 const DEFAULT_SETTINGS: OcrProoferSettings = {
   resolver: DEFAULT_RESOLVER_SETTINGS,
+  serverUrl: 'http://localhost:8000',
+  launchMode: 'reuse-existing',
 };
 
 // ── Document open abstraction ─────────────────────────────────────────────────
 //
 // All three entry points (file-menu, editor-menu, command palette) funnel
-// through openFileInProofer() → resolver.resolve() → activateView() → view.openDocument(docSet).
+// through openFileInProofer() → resolver.resolve() → openInWebApp().
 //
-// Future: replace PlaceholderDocumentOpenService with a real bridge to the React app
-// once the React UI is mounted inside OcrProoferView.
+// The Obsidian-side OcrProoferView remains as a placeholder panel; the primary
+// UI is the React web frontend opened in a browser tab via openInWebApp().
 
 export interface DocumentOpenService {
   openDocumentByPath(path: string): void;
@@ -42,11 +54,11 @@ export interface DocumentOpenService {
 
 class PlaceholderDocumentOpenService implements DocumentOpenService {
   openDocumentByPath(_path: string): void {
-    // no-op until React UI is mounted
+    // no-op until React UI is mounted inside the Obsidian panel
   }
 
   openDocumentSet(_set: OcrDocumentSet): void {
-    // no-op until React UI is mounted
+    // no-op until React UI is mounted inside the Obsidian panel
   }
 }
 
@@ -76,12 +88,6 @@ export class OcrProoferView extends ItemView {
     const container = this.containerEl.children[1] as HTMLElement;
     container.empty();
     container.addClass('ocr-proofer-view');
-
-    // Future: replace with React mount
-    //   import { createRoot } from 'react-dom/client';
-    //   import { OcrProoferApp } from './ui/OcrProoferApp';
-    //   this._reactRoot = createRoot(container);
-    //   this._reactRoot.render(<OcrProoferApp openService={this.openService} app={this.app} />);
 
     const placeholder = container.createDiv({ cls: 'ocr-proofer-placeholder' });
     placeholder.createEl('p', { text: 'OCR Proofer' });
@@ -199,6 +205,12 @@ export default class OcrProoferPlugin extends Plugin {
           ...(savedResolver.required ?? {}),
         },
       },
+      serverUrl: (typeof saved.serverUrl === 'string' && saved.serverUrl)
+        ? saved.serverUrl
+        : DEFAULT_SETTINGS.serverUrl,
+      launchMode: (saved.launchMode === 'reuse-existing' || saved.launchMode === 'always-new')
+        ? saved.launchMode
+        : DEFAULT_SETTINGS.launchMode,
     };
     this.rebuildResolver();
   }
@@ -231,12 +243,53 @@ export default class OcrProoferPlugin extends Plugin {
     return leaf.view as OcrProoferView;
   }
 
+  // ── Web app opening ───────────────────────────────────────────────────────
+  //
+  // Dispatches to the running proofreading web app based on launchMode:
+  //   reuse-existing  – use SSE bridge; fall back to new tab when no client is listening.
+  //   always-new      – always open a new browser tab.
+  private async openInWebApp(file: TFile): Promise<void> {
+    const note = file.path;
+    const serverUrl = this.settings.serverUrl.replace(/\/$/, '');
+    const newTabUrl = `${serverUrl}/?note=${encodeURIComponent(note)}`;
+
+    if (this.settings.launchMode === 'always-new') {
+      window.open(newTabUrl, '_blank');
+      new Notice('影印校エディタを新しいタブで開きました。');
+      return;
+    }
+
+    // reuse-existing: try SSE bridge first.
+    try {
+      const resp = await fetch(`${serverUrl}/api/bridge/open`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          vault: this.app.vault.getName(),
+          note,
+          name: file.name,
+        }),
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const data: { delivered: boolean } = await resp.json();
+      if (data.delivered) {
+        new Notice('既存の影印校エディタにノートを切り替えました。');
+      } else {
+        window.open(newTabUrl, '_blank');
+        new Notice('影印校エディタを新しく開きました。');
+      }
+    } catch (_e) {
+      window.open(newTabUrl, '_blank');
+      new Notice('既存タブへの通知に失敗したため、新しいタブを開きました。');
+    }
+  }
+
   // ── File open pipeline ────────────────────────────────────────────────────
   //
   // 1. Validates the extension.
   // 2. Resolves TFile → OcrDocumentSet using the configured strategy.
   // 3. Notifies the user about required missing slots (per settings.resolver.required).
-  // 4. Activates (or reuses) the view and passes the full document set.
+  // 4. Opens the web proofreading app via openInWebApp() based on launchMode.
   private async openFileInProofer(file: TFile): Promise<void> {
     if (!SUPPORTED_EXTENSIONS.has(file.extension)) {
       new Notice(
@@ -272,10 +325,7 @@ export default class OcrProoferPlugin extends Plugin {
       new Notice(`OCR Proofer: 必須ファイルが見つかりません — ${listed}`);
     }
 
-    const view = await this.activateView();
-    if (!view) return;
-
-    view.openDocument(docSet);
+    await this.openInWebApp(file);
   }
 }
 
@@ -296,6 +346,47 @@ class OcrProoferSettingTab extends PluginSettingTab {
     containerEl.empty();
 
     containerEl.createEl('h2', { text: 'OCR Proofer 設定' });
+
+    // ── 起動設定 ──────────────────────────────────────────────────────────────
+    containerEl.createEl('h3', { text: '起動設定' });
+
+    new Setting(containerEl)
+      .setName('サーバー URL')
+      .setDesc('影印校アプリのベース URL（既定: http://localhost:8000）')
+      .addText((text) =>
+        text
+          .setPlaceholder('http://localhost:8000')
+          .setValue(this.plugin.settings.serverUrl)
+          .onChange(async (value) => {
+            this.plugin.settings.serverUrl = value.trim() || DEFAULT_SETTINGS.serverUrl;
+            await this.plugin.saveSettings();
+          }),
+      );
+
+    new Setting(containerEl)
+      .setName('起動モード')
+      .setDesc('通常の校正作業では「既存タブを再利用」を推奨します。')
+      .addDropdown((dropdown) =>
+        dropdown
+          .addOption('reuse-existing', '既存タブを再利用')
+          .addOption('always-new', '常に新しいタブを開く')
+          .setValue(this.plugin.settings.launchMode)
+          .onChange(async (value) => {
+            this.plugin.settings.launchMode = value as LaunchMode;
+            await this.plugin.saveSettings();
+          }),
+      );
+
+    const modeDesc = containerEl.createEl('div', { cls: 'setting-item-description' });
+    modeDesc.style.padding = '0 12px 12px';
+    const ul = modeDesc.createEl('ul');
+    ul.style.margin = '4px 0 0 16px';
+    const li1 = ul.createEl('li');
+    li1.createEl('strong', { text: '既存タブを再利用' });
+    li1.appendText('：すでに開いている影印校エディタがあれば、そのタブで別ノートに切り替えます。開いていない場合のみ新しいタブを開きます。');
+    const li2 = ul.createEl('li');
+    li2.createEl('strong', { text: '常に新しいタブを開く' });
+    li2.appendText('：ノートごとに別タブで開きます。複数ノートを並行して確認したい場合に使います。');
 
     // ── RESOLVER section ──────────────────────────────────────────────────────
     containerEl.createEl('h3', { text: 'RESOLVER' });

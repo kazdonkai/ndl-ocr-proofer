@@ -19,5 +19,7 @@ await esbuild.build({
   logLevel: 'info',
   sourcemap: prod ? false : 'inline',
   treeShaking: true,
-  outfile: '../../.obsidian/plugins/ocr-proofer/main.js',
+  // prod (npm run build): outputs main.js into this directory (distribution artifact).
+  // dev  (npm run dev):   outputs directly into the vault plugin dir for live testing.
+  outfile: prod ? 'main.js' : '../../.obsidian/plugins/ocr-proofer/main.js',
 });

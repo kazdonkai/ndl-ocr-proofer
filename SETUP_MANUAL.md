@@ -3,6 +3,9 @@
 NDL古典籍OCR 校正支援アプリ  
 NDL Koten OCR Proofreading Assistant
 
+> **動作環境 / Platform**: このアプリは **macOS 専用**です。OCR エンジン `ndlkotenocr-lite` が Windows に対応していないため、Windows での動作はサポートされません。  
+> This application runs on **macOS only**. `ndlkotenocr-lite` does not support Windows.
+
 ---
 
 ## 1. 設定ファイルの作成 / Create Configuration File
