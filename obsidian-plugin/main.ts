@@ -270,7 +270,11 @@ export default class OcrProoferPlugin extends Plugin {
           const checkData: { found: boolean } = await checkResp.json();
           if (checkData.found) {
             // Same note is open — ask for confirmation before reloading the tab.
-            const confirmed = await showConfirmModal(this.app, file.name);
+            const confirmed = await showConfirmModal(
+              this.app,
+              'ノートの再読み込み確認',
+              `「${file.name}」はすでにブラウザタブで開かれています。\n未保存の変更がある場合は失われます。タブを更新しますか？`,
+            );
             if (!confirmed) return;
 
             // User confirmed — now deliver the switch event.
@@ -302,8 +306,32 @@ export default class OcrProoferPlugin extends Plugin {
       return;
     }
 
-    // reuse-existing: try SSE bridge first.
+    // reuse-existing: check if any tab is open, confirm if so, then deliver.
     try {
+      // check-any: no SSE delivered, just check connection.
+      const checkResp = await fetch(`${serverUrl}/api/bridge/open`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          vault: this.app.vault.getName(),
+          note,
+          name: file.name,
+          mode: 'check-any',
+        }),
+      });
+      if (checkResp.ok) {
+        const checkData: { found: boolean } = await checkResp.json();
+        if (checkData.found) {
+          // Tab already open — confirm before switching (may discard unsaved changes).
+          const confirmed = await showConfirmModal(
+            this.app,
+            'ノートの切り替え確認',
+            `影印校エディタが既に開かれています。「${file.name}」に切り替えます。\n未保存の変更がある場合は失われます。続けますか？`,
+          );
+          if (!confirmed) return;
+        }
+      }
+
       const resp = await fetch(`${serverUrl}/api/bridge/open`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -540,36 +568,35 @@ class OcrProoferSettingTab extends PluginSettingTab {
 
 // ── Confirmation modal ────────────────────────────────────────────────────────
 
-function showConfirmModal(app: App, fileName: string): Promise<boolean> {
+function showConfirmModal(app: App, heading: string, body: string): Promise<boolean> {
   return new Promise((resolve) => {
-    new ConfirmModal(app, fileName, resolve).open();
+    new ConfirmModal(app, heading, body, resolve).open();
   });
 }
 
 class ConfirmModal extends Modal {
-  private fileName: string;
+  private heading: string;
+  private body: string;
   private onResolve: (confirmed: boolean) => void;
   private resolved = false;
 
-  constructor(app: App, fileName: string, onResolve: (confirmed: boolean) => void) {
+  constructor(app: App, heading: string, body: string, onResolve: (confirmed: boolean) => void) {
     super(app);
-    this.fileName = fileName;
+    this.heading = heading;
+    this.body = body;
     this.onResolve = onResolve;
   }
 
   onOpen(): void {
     const { contentEl } = this;
-    contentEl.createEl('h3', { text: 'ノートの再読み込み確認' });
-    contentEl.createEl('p', {
-      text: `「${this.fileName}」はすでにブラウザタブで開かれています。`,
-    });
-    contentEl.createEl('p', {
-      text: '未保存の変更がある場合は失われます。タブを更新しますか？',
-    });
+    contentEl.createEl('h3', { text: this.heading });
+    for (const line of this.body.split('\n')) {
+      contentEl.createEl('p', { text: line });
+    }
     new Setting(contentEl)
       .addButton((btn) =>
         btn
-          .setButtonText('更新する')
+          .setButtonText('続ける')
           .setCta()
           .onClick(() => {
             this.resolved = true;

@@ -502,7 +502,12 @@ var OcrProoferPlugin = class extends import_obsidian.Plugin {
         if (checkResp.ok) {
           const checkData = await checkResp.json();
           if (checkData.found) {
-            const confirmed = await showConfirmModal(this.app, file.name);
+            const confirmed = await showConfirmModal(
+              this.app,
+              "\u30CE\u30FC\u30C8\u306E\u518D\u8AAD\u307F\u8FBC\u307F\u78BA\u8A8D",
+              `\u300C${file.name}\u300D\u306F\u3059\u3067\u306B\u30D6\u30E9\u30A6\u30B6\u30BF\u30D6\u3067\u958B\u304B\u308C\u3066\u3044\u307E\u3059\u3002
+\u672A\u4FDD\u5B58\u306E\u5909\u66F4\u304C\u3042\u308B\u5834\u5408\u306F\u5931\u308F\u308C\u307E\u3059\u3002\u30BF\u30D6\u3092\u66F4\u65B0\u3057\u307E\u3059\u304B\uFF1F`
+            );
             if (!confirmed) return;
             const resp = await fetch(`${serverUrl}/api/bridge/open`, {
               method: "POST",
@@ -530,6 +535,28 @@ var OcrProoferPlugin = class extends import_obsidian.Plugin {
       return;
     }
     try {
+      const checkResp = await fetch(`${serverUrl}/api/bridge/open`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          vault: this.app.vault.getName(),
+          note,
+          name: file.name,
+          mode: "check-any"
+        })
+      });
+      if (checkResp.ok) {
+        const checkData = await checkResp.json();
+        if (checkData.found) {
+          const confirmed = await showConfirmModal(
+            this.app,
+            "\u30CE\u30FC\u30C8\u306E\u5207\u308A\u66FF\u3048\u78BA\u8A8D",
+            `\u5F71\u5370\u6821\u30A8\u30C7\u30A3\u30BF\u304C\u65E2\u306B\u958B\u304B\u308C\u3066\u3044\u307E\u3059\u3002\u300C${file.name}\u300D\u306B\u5207\u308A\u66FF\u3048\u307E\u3059\u3002
+\u672A\u4FDD\u5B58\u306E\u5909\u66F4\u304C\u3042\u308B\u5834\u5408\u306F\u5931\u308F\u308C\u307E\u3059\u3002\u7D9A\u3051\u307E\u3059\u304B\uFF1F`
+          );
+          if (!confirmed) return;
+        }
+      }
       const resp = await fetch(`${serverUrl}/api/bridge/open`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -675,29 +702,27 @@ var OcrProoferSettingTab = class extends import_obsidian.PluginSettingTab {
     );
   }
 };
-function showConfirmModal(app, fileName) {
+function showConfirmModal(app, heading, body) {
   return new Promise((resolve) => {
-    new ConfirmModal(app, fileName, resolve).open();
+    new ConfirmModal(app, heading, body, resolve).open();
   });
 }
 var ConfirmModal = class extends import_obsidian.Modal {
-  constructor(app, fileName, onResolve) {
+  constructor(app, heading, body, onResolve) {
     super(app);
     this.resolved = false;
-    this.fileName = fileName;
+    this.heading = heading;
+    this.body = body;
     this.onResolve = onResolve;
   }
   onOpen() {
     const { contentEl } = this;
-    contentEl.createEl("h3", { text: "\u30CE\u30FC\u30C8\u306E\u518D\u8AAD\u307F\u8FBC\u307F\u78BA\u8A8D" });
-    contentEl.createEl("p", {
-      text: `\u300C${this.fileName}\u300D\u306F\u3059\u3067\u306B\u30D6\u30E9\u30A6\u30B6\u30BF\u30D6\u3067\u958B\u304B\u308C\u3066\u3044\u307E\u3059\u3002`
-    });
-    contentEl.createEl("p", {
-      text: "\u672A\u4FDD\u5B58\u306E\u5909\u66F4\u304C\u3042\u308B\u5834\u5408\u306F\u5931\u308F\u308C\u307E\u3059\u3002\u30BF\u30D6\u3092\u66F4\u65B0\u3057\u307E\u3059\u304B\uFF1F"
-    });
+    contentEl.createEl("h3", { text: this.heading });
+    for (const line of this.body.split("\n")) {
+      contentEl.createEl("p", { text: line });
+    }
     new import_obsidian.Setting(contentEl).addButton(
-      (btn) => btn.setButtonText("\u66F4\u65B0\u3059\u308B").setCta().onClick(() => {
+      (btn) => btn.setButtonText("\u7D9A\u3051\u308B").setCta().onClick(() => {
         this.resolved = true;
         this.onResolve(true);
         this.close();
