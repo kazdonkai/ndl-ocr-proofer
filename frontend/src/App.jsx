@@ -449,7 +449,7 @@ function App() {
       showToast('Vault名が未設定です。設定 > OBSIDIAN から Vault名を入力してください。');
       return;
     }
-    const uri = buildObsidianUri(vaultName, docId);
+    const uri = buildObsidianUri(vaultName, docId, documentData?.vault_relative_path);
     if (!uri) {
       showToast('Obsidian URI を生成できませんでした');
       return;

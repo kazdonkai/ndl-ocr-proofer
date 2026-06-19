@@ -177,12 +177,18 @@ class ApprovedDictManager:
         return row
 
     def update_entry(self, filename: str, term: str, updates: dict) -> dict:
-        """既存エントリのフィールドを部分更新する。"""
+        """既存エントリのフィールドを部分更新する。new_term を含む場合は term をリネームする。"""
         rows = self._read_rows(filename)
         term = term.strip()
+        new_term = updates.get("new_term", "").strip() if updates.get("new_term") else ""
+        if new_term and new_term != term:
+            if any(r.get("term", "").strip() == new_term for r in rows):
+                raise ValueError(f"term '{new_term}' は既に存在します")
         for row in rows:
             if row.get("term", "").strip() == term:
                 self._backup(filename)
+                if new_term and new_term != term:
+                    row["term"] = new_term
                 for key in ("normalized", "variants", "reading", "category",
                             "domain", "priority", "protect", "source", "approved"):
                     if key in updates:

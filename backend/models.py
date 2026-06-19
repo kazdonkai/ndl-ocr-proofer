@@ -38,6 +38,9 @@ class DocumentResponse(BaseModel):
     ocr_json: dict | None = None
     logs: list[str] = []
     frontmatter: dict | None = None
+    # Vault ルートからの相対パス（例: subdir/note.md）。
+    # 同名ノートが複数存在する Vault でも一意に obsidian:// URI を生成するために使用する。
+    vault_relative_path: str | None = None
 
 
 class CorrectionEntry(BaseModel):
@@ -267,6 +270,7 @@ class AddApprovedEntryRequest(BaseModel):
 
 class UpdateApprovedEntryRequest(BaseModel):
     """部分更新用。None フィールドは変更しない。"""
+    new_term: Optional[str] = None
     normalized: Optional[str] = None
     variants: Optional[str] = None
     reading: Optional[str] = None
@@ -288,6 +292,7 @@ class ApprovedDictListResponse(BaseModel):
 
 class UpdateTemporaryEntryRequest(BaseModel):
     """PUT /api/dictionary/temporary/{filename}/{term} のリクエスト。None フィールドは変更しない。"""
+    new_term: Optional[str] = None
     normalized: Optional[str] = None
     variants: Optional[str] = None
     reading: Optional[str] = None

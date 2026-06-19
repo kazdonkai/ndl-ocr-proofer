@@ -12,6 +12,28 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [1.1.4] — 2026-06-19
+
+### Added / 追加
+
+- **`vault_relative_path` フィールドを `DocumentResponse` に追加** (`backend/models.py`, `backend/vault_reader.py`): Vault ルートを基準にした相対パス（例: `subdir/note.md`）を API レスポンスに含める。同名ノートが複数ディレクトリに存在する Vault でも、obsidian:// URI が常に意図したノートを開くことを保証する。既存フィールドとの後方互換を保ち、フィールド未定義の旧クライアントは影響を受けない。
+
+- **`obsidian://` URI 生成で `vault_relative_path` を優先使用** (`frontend/src/utils/obsidianUri.js`, `frontend/src/App.jsx`): 「Obsidianで開く」ボタン押下時、`DocumentResponse.vault_relative_path` が取得できた場合はそれを `file=` パラメータに使用する。取得できない場合は従来通りユーザー入力 `docId` にフォールバックする（後方互換）。
+
+- **辞書エントリの term リネーム対応** (`backend/approved_dict_manager.py`, `backend/temporary_dict_manager.py`): `PATCH /api/dictionary/entries/{type}/{filename}/{term}` で `new_term` フィールドを渡すと term をリネームできるように変更。重複チェック付き。
+
+- **obsidian-plugin/README.md トラブルシューティングセクション追加**: 「Obsidianで開く」ボタンを押しても何も起きない場合の症状・原因候補（起動未確認 / Vault 名ミス）・確認手順・修正手順を追記。
+
+### Changed / 変更
+
+- **縦書きモードの疑義スパンマーカーを傍線に変更** (`frontend/src/components/Proofreader.css`): 縦書き表示時に疑義スパンのハイライトを従来の背景色＋下線から、文字右側の傍線（`border-right: 2px solid`）に切り替える。横書きモードの表示は変更なし。Vertical writing: suspect span marker changed to sidelining.
+
+- **`start.sh` バックエンド起動待機ロジックを改善** (`start.sh`): production・dev 両モードのバックエンド起動待機ループに、プロセス生存チェック（`kill -0`）を追加。大規模 Vault では起動時の初回インデックス（VaultReader）に最大 30 秒以上かかるため、待機上限を 10 秒から 60 秒に延長した。ポート未検知でもプロセスが生存している限り待機を継続し、プロセスが死亡した場合のみ即座にエラーを報告する。Improved backend startup wait in `start.sh`: added process liveness check and extended timeout to 60 s to prevent false timeout errors during large-Vault initial indexing.
+
+- **辞書管理画面を常時インライン編集モードに変更** (`frontend/src/components/DictionaryManager.jsx`): 従来の「編集ボタンで1行ずつ展開」方式を廃止し、全エントリを最初からインライン編集可能な状態で表示する。変更は「一括保存」ボタンで確定。`editingEntry` state を `editRows`（全行管理）に置き換え。
+
+---
+
 ## [1.1.3] — 2026-06-18
 
 ### Summary / 概要

@@ -259,12 +259,18 @@ class TemporaryDictManager:
         return None
 
     def update_entry(self, filename: str, term: str, updates: dict) -> dict:
-        """既存エントリのフィールドを部分更新する（バックアップ後）。"""
+        """既存エントリのフィールドを部分更新する（バックアップ後）。new_term を含む場合は term をリネームする。"""
         rows = self._read_rows(filename)
         term = term.strip()
+        new_term = updates.get("new_term", "").strip() if updates.get("new_term") else ""
+        if new_term and new_term != term:
+            if any(r.get("term", "").strip() == new_term for r in rows):
+                raise ValueError(f"term '{new_term}' は既に存在します")
         for row in rows:
             if row.get("term", "").strip() == term:
                 self.backup(filename)
+                if new_term and new_term != term:
+                    row["term"] = new_term
                 normalized_changed = (
                     "normalized" in updates
                     and str(updates["normalized"]).strip() != row.get("normalized", "").strip()

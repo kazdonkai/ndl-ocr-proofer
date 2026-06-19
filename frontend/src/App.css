@@ -1941,6 +1941,30 @@ body {
   font-size: 0.76rem;
 }
 
+/* 常時インライン編集セル */
+.dict-inline-input {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  color: var(--text-main);
+  padding: 2px 4px;
+  width: 100%;
+  font-size: 0.76rem;
+  box-sizing: border-box;
+  transition: border-color 0.1s;
+}
+.dict-inline-input:hover {
+  border-color: var(--border);
+}
+.dict-inline-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: var(--bg-dark);
+}
+.dict-inline-input--num {
+  width: 4.5rem;
+}
+
 .dict-cell-term {
   font-weight: 500;
   color: var(--text-main);

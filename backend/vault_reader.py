@@ -207,6 +207,11 @@ class VaultReader:
             except Exception:
                 fm = {}
 
+        try:
+            vault_relative_path = str(md_path.relative_to(self.vault_path))
+        except ValueError:
+            vault_relative_path = None
+
         return {
             "doc_id": query,
             "resolved_name": md_path.stem,
@@ -217,6 +222,7 @@ class VaultReader:
             "ocr_pages": ocr_pages,
             "ocr_json": ocr_json,
             "frontmatter": fm,
+            "vault_relative_path": vault_relative_path,
         }
 
     @staticmethod

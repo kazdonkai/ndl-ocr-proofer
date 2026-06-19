@@ -270,10 +270,10 @@ export default function DictionaryManager({ onClose }) {
   const [addError, setAddError] = useState(null);
   const [addSaving, setAddSaving] = useState(false);
 
-  // ── エントリ編集 ─────────────────────────────────────────────────────────────
-  const [editingEntry, setEditingEntry] = useState(null); // { entry, form, dictType }
-  const [editError, setEditError] = useState(null);
-  const [editSaving, setEditSaving] = useState(false);
+  // ── インライン編集（全行常時編集可） ─────────────────────────────────────────
+  const [editRows, setEditRows] = useState({});          // "file|term" -> form values
+  const [saveAllLoading, setSaveAllLoading] = useState(false);
+  const [saveAllError, setSaveAllError] = useState(null);
 
   // ── 確認ダイアログ ───────────────────────────────────────────────────────────
   const [deleteTarget, setDeleteTarget] = useState(null);       // { entry, dictType }
@@ -339,6 +339,27 @@ export default function DictionaryManager({ onClose }) {
     return [...approved, ...temp];
   }, [approvedEntries, tempEntries]);
 
+  // allEntries が変わるたびに editRows を初期化（保存後のリロード含む）
+  useEffect(() => {
+    const rows = {};
+    for (const entry of allEntries) {
+      const key = `${entry.source_file}|${entry.term}`;
+      rows[key] = {
+        term: entry.term,
+        normalized: entry.normalized ?? '',
+        variants: variantsToDisplay(entry.variants),
+        reading: entry.reading ?? '',
+        category: entry.category ?? '',
+        domain: entry.domain ?? '',
+        priority: String(entry.priority ?? 0.8),
+        protect: !!entry.protect,
+        note: entry.note ?? '',
+        enabled: entry.enabled !== false,
+      };
+    }
+    setEditRows(rows);
+  }, [allEntries]);
+
   // ── フィルタ後エントリ ────────────────────────────────────────────────────────
   const filtered = useMemo(() => {
     let result = allEntries;
@@ -400,48 +421,62 @@ export default function DictionaryManager({ onClose }) {
     }
   };
 
-  // ── 編集開始 ────────────────────────────────────────────────────────────────
-  const startEdit = (entry, dictType) => {
-    const form = {
-      normalized: entry.normalized,
-      variants: variantsToDisplay(entry.variants),
-      reading: entry.reading,
-      category: entry.category,
-      domain: entry.domain,
-      priority: String(entry.priority),
-      protect: entry.protect,
-      source: entry.source,
-      approved: entry.approved,
-      note: entry.note ?? '',
-      enabled: entry.enabled ?? true,
-    };
-    setEditingEntry({ entry, form, dictType });
-    setEditError(null);
+  // ── インライン編集ヘルパー ───────────────────────────────────────────────────
+  const updateRow = (key, field, value) => {
+    setEditRows(prev => ({ ...prev, [key]: { ...prev[key], [field]: value } }));
   };
 
-  // ── 編集保存 ────────────────────────────────────────────────────────────────
-  const handleEditSave = async () => {
-    if (!editingEntry) return;
-    setEditSaving(true);
-    setEditError(null);
-    try {
-      const { entry, form, dictType } = editingEntry;
+  // ── 全エントリ一括保存 ───────────────────────────────────────────────────────
+  const handleSaveAll = async () => {
+    setSaveAllLoading(true);
+    setSaveAllError(null);
+    const errors = [];
+
+    for (const entry of allEntries) {
+      const key = `${entry.source_file}|${entry.term}`;
+      const form = editRows[key];
+      if (!form) continue;
+
+      const origVariants = variantsToDisplay(entry.variants);
+      const changed =
+        form.term !== entry.term ||
+        form.normalized !== (entry.normalized ?? '') ||
+        form.variants !== origVariants ||
+        form.reading !== (entry.reading ?? '') ||
+        form.category !== (entry.category ?? '') ||
+        form.domain !== (entry.domain ?? '') ||
+        form.priority !== String(entry.priority ?? 0.8) ||
+        !!form.protect !== !!entry.protect;
+      if (!changed) continue;
+
       const updates = {
-        ...form,
+        normalized: form.normalized,
         variants: variantsToStorage(form.variants),
-        priority: parseFloat(form.priority) || entry.priority,
+        reading: form.reading,
+        category: form.category,
+        domain: form.domain,
+        priority: parseFloat(form.priority) || (entry.priority ?? 0.8),
+        protect: form.protect,
+        ...(form.term !== entry.term ? { new_term: form.term } : {}),
       };
-      if (dictType === 'approval') {
-        await updateApprovedEntry(entry.source_file, entry.term, updates);
-      } else {
-        await updateTemporaryEntry(entry.source_file, entry.term, updates);
+
+      try {
+        if (entry._dictType === 'approval') {
+          await updateApprovedEntry(entry.source_file, entry.term, updates);
+        } else {
+          await updateTemporaryEntry(entry.source_file, entry.term, updates);
+        }
+      } catch (e) {
+        errors.push(`「${entry.term}」: ${e.message}`);
       }
-      setEditingEntry(null);
+    }
+
+    setSaveAllLoading(false);
+    if (errors.length > 0) {
+      setSaveAllError(errors.join(' / '));
+    } else {
+      showInfo('保存完了');
       await load();
-    } catch (e) {
-      setEditError(e.message);
-    } finally {
-      setEditSaving(false);
     }
   };
 
@@ -557,20 +592,24 @@ export default function DictionaryManager({ onClose }) {
             <button className="dict-btn dict-btn-secondary" onClick={() => setShowCreateFile(true)}>
               ＋ファイル作成
             </button>
-            <button className="dict-btn dict-btn-primary" onClick={() => { setShowAddForm(v => !v); setAddError(null); }}>
+            <button className="dict-btn dict-btn-secondary" onClick={() => { setShowAddForm(v => !v); setAddError(null); }}>
               {showAddForm ? '▲ キャンセル' : '＋ エントリ追加'}
             </button>
             {dictTypeFilter === 'temporary' && (
-              <button className="dict-btn dict-btn-primary" onClick={() => { setShowTempRegForm(v => !v); setTempRegError(null); }}>
+              <button className="dict-btn dict-btn-secondary" onClick={() => { setShowTempRegForm(v => !v); setTempRegError(null); }}>
                 {showTempRegForm ? '▲ キャンセル' : '＋ temporary 登録'}
               </button>
             )}
+            <button className="dict-btn dict-btn-primary" onClick={handleSaveAll} disabled={saveAllLoading}>
+              {saveAllLoading ? '保存中…' : '💾 保存'}
+            </button>
             <button className="dict-manager-close" onClick={onClose}>✕</button>
           </div>
         </div>
 
         {infoMsg && <div className="dict-msg-info">{infoMsg}</div>}
         {error && <div className="dict-msg-error">{error}</div>}
+        {saveAllError && <div className="dict-msg-error">保存エラー: {saveAllError}</div>}
 
         {/* ── エントリ追加フォーム（approval のみ） ── */}
         {showAddForm && (
@@ -742,45 +781,16 @@ export default function DictionaryManager({ onClose }) {
                 {displayEntries.map((entry, idx) => {
                   const isTemp = entry._dictType === 'temporary';
                   const isDisabled = isTemp && entry.enabled === false;
-                  const isEditing = editingEntry?.entry === entry;
-
-                  if (isEditing) {
-                    return (
-                      <tr key={idx} className="dict-row-editing">
-                        <td><DictTypeBadge type={entry._dictType} disabled={isDisabled} /></td>
-                        <td>{entry.term}</td>
-                        <td><input value={editingEntry.form.normalized}
-                          onChange={e => setEditingEntry(s => ({ ...s, form: { ...s.form, normalized: e.target.value } }))} /></td>
-                        <td><input value={editingEntry.form.variants}
-                          onChange={e => setEditingEntry(s => ({ ...s, form: { ...s.form, variants: e.target.value } }))} /></td>
-                        <td><input value={editingEntry.form.category}
-                          onChange={e => setEditingEntry(s => ({ ...s, form: { ...s.form, category: e.target.value } }))} /></td>
-                        <td><input value={editingEntry.form.domain}
-                          onChange={e => setEditingEntry(s => ({ ...s, form: { ...s.form, domain: e.target.value } }))} /></td>
-                        <td><input type="number" step="0.1" min="0" max="1" style={{ width: '4rem' }}
-                          value={editingEntry.form.priority}
-                          onChange={e => setEditingEntry(s => ({ ...s, form: { ...s.form, priority: e.target.value } }))} /></td>
-                        <td><input type="checkbox" checked={editingEntry.form.protect}
-                          onChange={e => setEditingEntry(s => ({ ...s, form: { ...s.form, protect: e.target.checked } }))} /></td>
-                        <td style={{ fontSize: '0.8rem', color: '#888' }}>{entry.source_file}</td>
-                        <td className="dict-row-actions">
-                          {editError && <span className="dict-msg-error">{editError}</span>}
-                          <button className="dict-btn dict-btn-primary dict-btn-sm" onClick={handleEditSave} disabled={editSaving}>
-                            {editSaving ? '…' : '保存'}
-                          </button>
-                          <button className="dict-btn dict-btn-secondary dict-btn-sm" onClick={() => setEditingEntry(null)}>
-                            取消
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  }
+                  const key = `${entry.source_file}|${entry.term}`;
+                  const form = editRows[key] ?? {};
 
                   return (
                     <tr key={idx} style={isDisabled ? { opacity: 0.45 } : undefined}>
                       <td><DictTypeBadge type={entry._dictType} disabled={isDisabled} /></td>
                       <td className="dict-cell-term">
-                        {entry.term}
+                        <input className="dict-inline-input"
+                          value={form.term ?? ''}
+                          onChange={e => updateRow(key, 'term', e.target.value)} />
                         {entry.is_promotion_candidate && (
                           <span
                             className="dict-badge-candidate"
@@ -790,12 +800,27 @@ export default function DictionaryManager({ onClose }) {
                           </span>
                         )}
                       </td>
-                      <td>{entry.normalized}</td>
-                      <td className="dict-cell-dim">{variantsToDisplay(entry.variants)}</td>
-                      <td>{entry.category}</td>
-                      <td>{entry.domain}</td>
-                      <td>{entry.priority}</td>
-                      <td>{entry.protect ? '✓' : ''}</td>
+                      <td><input className="dict-inline-input"
+                        value={form.normalized ?? ''}
+                        onChange={e => updateRow(key, 'normalized', e.target.value)} /></td>
+                      <td><input className="dict-inline-input"
+                        value={form.variants ?? ''}
+                        onChange={e => updateRow(key, 'variants', e.target.value)} /></td>
+                      <td><input className="dict-inline-input"
+                        value={form.category ?? ''}
+                        onChange={e => updateRow(key, 'category', e.target.value)} /></td>
+                      <td><input className="dict-inline-input"
+                        value={form.domain ?? ''}
+                        onChange={e => updateRow(key, 'domain', e.target.value)} /></td>
+                      <td><input type="number" step="0.1" min="0" max="1"
+                        className="dict-inline-input dict-inline-input--num"
+                        value={form.priority ?? '0.8'}
+                        onChange={e => updateRow(key, 'priority', e.target.value)} /></td>
+                      <td style={{ textAlign: 'center' }}>
+                        <input type="checkbox"
+                          checked={!!form.protect}
+                          onChange={e => updateRow(key, 'protect', e.target.checked)} />
+                      </td>
                       <td className="dict-cell-dim" style={{ fontSize: '0.8rem' }}>{entry.source_file}</td>
                       <td className="dict-row-actions">
                         {isTemp && (
@@ -817,7 +842,6 @@ export default function DictionaryManager({ onClose }) {
                             </button>
                           </>
                         )}
-                        <button className="dict-btn dict-btn-secondary dict-btn-sm" onClick={() => startEdit(entry, entry._dictType)}>編集</button>
                         <button
                           className="dict-btn dict-btn-danger dict-btn-sm"
                           onClick={() => setDeleteTarget({ entry, dictType: entry._dictType })}

@@ -123,13 +123,22 @@ cmd_start() {
     BACKEND_PID=$!
     echo "$BACKEND_PID" >> "$PID_FILE"
 
-    # 起動待機（最大10秒）
+    # 起動待機（最大60秒）
+    # production モードでは VaultReader がモジュールインポート時に Vault 全体を
+    # インデックスするため、ポート bind まで最大 30s 以上かかる。
+    # ポートが見えなくてもプロセスが生きていれば正常起動中とみなして待機を継続し、
+    # プロセスが死亡した場合（import エラー等）のみ即座にエラーを報告する。
     local attempts=0
     while ! port_in_use "$BACKEND_PORT"; do
       sleep 0.5
       attempts=$((attempts + 1))
-      if [[ $attempts -ge 20 ]]; then
-        log_error "バックエンドの起動がタイムアウトしました"
+      if ! kill -0 "$BACKEND_PID" 2>/dev/null; then
+        log_error "バックエンドプロセスが予期せず終了しました"
+        log_error "ログを確認してください: $BACKEND_LOG"
+        exit 1
+      fi
+      if [[ $attempts -ge 120 ]]; then
+        log_error "バックエンドの起動がタイムアウトしました (60s)"
         log_error "ログを確認してください: $BACKEND_LOG"
         exit 1
       fi
@@ -216,12 +225,20 @@ cmd_prod() {
     BACKEND_PID=$!
     echo "$BACKEND_PID" >> "$PID_FILE"
 
+    # 起動待機（最大60秒）— dev モードと同じ理由でプロセス生存チェックを併用する。
+    # production では --reload がなく単一プロセスで起動するため、
+    # ポート bind の前に VaultReader インデックスが完了するまで待機が必要。
     local attempts=0
     while ! port_in_use "$BACKEND_PORT"; do
       sleep 0.5
       attempts=$((attempts + 1))
-      if [[ $attempts -ge 20 ]]; then
-        log_error "バックエンドの起動がタイムアウトしました"
+      if ! kill -0 "$BACKEND_PID" 2>/dev/null; then
+        log_error "バックエンドプロセスが予期せず終了しました"
+        log_error "ログを確認してください: $BACKEND_LOG"
+        exit 1
+      fi
+      if [[ $attempts -ge 120 ]]; then
+        log_error "バックエンドの起動がタイムアウトしました (60s)"
         log_error "ログを確認してください: $BACKEND_LOG"
         exit 1
       fi

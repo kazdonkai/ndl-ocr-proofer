@@ -120,6 +120,88 @@
   overflow-y: hidden;
 }
 
+/* 縦書き疑義スパン — 傍線スタイル
+   writing-mode: vertical-rl では border-right が文字の右側（傍線の慣習的位置）に表示される。
+   背景塗りを外し border-right のみで疑義を示すことで行送りの可読性を保つ。 */
+.editor-composite-container.vertical .highlight-layer .highlight-span {
+  background-color: transparent;
+  border-bottom: none;
+  border-right: 2px solid #f59e0b;
+  border-radius: 0;
+}
+.editor-composite-container.vertical .highlight-layer .highlight-span:hover {
+  background-color: rgba(251, 191, 36, 0.15);
+}
+.editor-composite-container.vertical .highlight-layer .highlight-span.highlight-active {
+  background-color: rgba(245, 158, 11, 0.20);
+  border-bottom: none;
+  border-right: 3px solid #f59e0b;
+  box-shadow: none;
+  outline: none;
+}
+.editor-composite-container.vertical .highlight-layer .highlight-span.highlight-noise {
+  background-color: transparent;
+  border-bottom: none;
+  border-right: 2px solid #94a3b8;
+}
+.editor-composite-container.vertical .highlight-layer .highlight-span.highlight-noise:hover {
+  background-color: rgba(148, 163, 184, 0.15);
+}
+.editor-composite-container.vertical .highlight-layer .highlight-span.highlight-noise.highlight-active {
+  background-color: rgba(148, 163, 184, 0.15);
+  border-bottom: none;
+  border-right: 3px solid #94a3b8;
+  box-shadow: none;
+  outline: none;
+}
+.editor-composite-container.vertical .highlight-layer .highlight-span.highlight-file {
+  background-color: transparent;
+  border-bottom: none;
+  border-right: 2px solid #a3e635;
+}
+.editor-composite-container.vertical .highlight-layer .highlight-span.highlight-file:hover {
+  background-color: rgba(163, 230, 53, 0.15);
+}
+.editor-composite-container.vertical .highlight-layer .highlight-span.highlight-file.highlight-active {
+  background-color: rgba(163, 230, 53, 0.15);
+  border-bottom: none;
+  border-right: 3px solid #a3e635;
+  box-shadow: none;
+  outline: none;
+}
+.editor-composite-container.vertical .highlight-layer .highlight-span.highlight-protected {
+  background-color: transparent;
+  border-bottom: none;
+  border-right: 3px dotted #4ade80;
+}
+.editor-composite-container.vertical .highlight-layer .highlight-span.highlight-corrected {
+  background-color: rgba(20, 184, 166, 0.25);
+  border-bottom: none;
+  border-right: 2px solid #0d9488;
+  box-shadow: none;
+  outline: none;
+}
+.editor-composite-container.vertical .highlight-layer .highlight-span.highlight-dangerous {
+  background-color: transparent;
+  border-bottom: none;
+  border-right: 2px solid #ef4444;
+}
+.editor-composite-container.vertical .highlight-layer .highlight-span.highlight-dangerous:hover {
+  background-color: rgba(239, 68, 68, 0.15);
+}
+.editor-composite-container.vertical .highlight-layer .highlight-span.highlight-dangerous.highlight-active {
+  background-color: rgba(239, 68, 68, 0.15);
+  border-bottom: none;
+  border-right: 3px solid #ef4444;
+  box-shadow: none;
+  outline: none;
+}
+.editor-composite-container.vertical .highlight-layer .highlight-particle {
+  background-color: transparent;
+  border-bottom: none;
+  border-right: 2px solid #a78bfa;
+}
+
 .writing-mode-tabs {
   display: flex;
   background: var(--bg-dark);
