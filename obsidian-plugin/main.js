@@ -488,6 +488,25 @@ var OcrProoferPlugin = class extends import_obsidian.Plugin {
     const serverUrl = this.settings.serverUrl.replace(/\/$/, "");
     const newTabUrl = `${serverUrl}/?note=${encodeURIComponent(note)}`;
     if (this.settings.launchMode === "always-new") {
+      try {
+        const resp = await fetch(`${serverUrl}/api/bridge/open`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            vault: this.app.vault.getName(),
+            note,
+            name: file.name,
+            mode: "reuse-same-note"
+          })
+        });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json();
+        if (data.delivered) {
+          new import_obsidian.Notice("\u540C\u3058\u30CE\u30FC\u30C8\u304C\u65E2\u306B\u958B\u304B\u308C\u3066\u3044\u308B\u30BF\u30D6\u306B\u5207\u308A\u66FF\u3048\u307E\u3057\u305F\u3002");
+          return;
+        }
+      } catch (e) {
+      }
       window.open(newTabUrl, "_blank");
       new import_obsidian.Notice("\u5F71\u5370\u6821\u30A8\u30C7\u30A3\u30BF\u3092\u65B0\u3057\u3044\u30BF\u30D6\u3067\u958B\u304D\u307E\u3057\u305F\u3002");
       return;

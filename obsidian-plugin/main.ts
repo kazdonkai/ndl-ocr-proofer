@@ -254,6 +254,27 @@ export default class OcrProoferPlugin extends Plugin {
     const newTabUrl = `${serverUrl}/?note=${encodeURIComponent(note)}`;
 
     if (this.settings.launchMode === 'always-new') {
+      // Same note already open? Reuse that tab instead of duplicating.
+      try {
+        const resp = await fetch(`${serverUrl}/api/bridge/open`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            vault: this.app.vault.getName(),
+            note,
+            name: file.name,
+            mode: 'reuse-same-note',
+          }),
+        });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data: { delivered: boolean } = await resp.json();
+        if (data.delivered) {
+          new Notice('同じノートが既に開かれているタブに切り替えました。');
+          return;
+        }
+      } catch {
+        // bridge unreachable — fall through to new tab
+      }
       window.open(newTabUrl, '_blank');
       new Notice('影印校エディタを新しいタブで開きました。');
       return;
