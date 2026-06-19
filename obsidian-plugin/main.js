@@ -489,21 +489,39 @@ var OcrProoferPlugin = class extends import_obsidian.Plugin {
     const newTabUrl = `${serverUrl}/?note=${encodeURIComponent(note)}`;
     if (this.settings.launchMode === "always-new") {
       try {
-        const resp = await fetch(`${serverUrl}/api/bridge/open`, {
+        const checkResp = await fetch(`${serverUrl}/api/bridge/open`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             vault: this.app.vault.getName(),
             note,
             name: file.name,
-            mode: "reuse-same-note"
+            mode: "check-same-note"
           })
         });
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-        const data = await resp.json();
-        if (data.delivered) {
-          new import_obsidian.Notice("\u540C\u3058\u30CE\u30FC\u30C8\u304C\u65E2\u306B\u958B\u304B\u308C\u3066\u3044\u308B\u30BF\u30D6\u306B\u5207\u308A\u66FF\u3048\u307E\u3057\u305F\u3002");
-          return;
+        if (checkResp.ok) {
+          const checkData = await checkResp.json();
+          if (checkData.found) {
+            const confirmed = await showConfirmModal(this.app, file.name);
+            if (!confirmed) return;
+            const resp = await fetch(`${serverUrl}/api/bridge/open`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                vault: this.app.vault.getName(),
+                note,
+                name: file.name,
+                mode: "reuse-same-note"
+              })
+            });
+            if (resp.ok) {
+              const data = await resp.json();
+              if (data.delivered) {
+                new import_obsidian.Notice("\u540C\u3058\u30CE\u30FC\u30C8\u304C\u65E2\u306B\u958B\u304B\u308C\u3066\u3044\u308B\u30BF\u30D6\u306B\u5207\u308A\u66FF\u3048\u307E\u3057\u305F\u3002");
+                return;
+              }
+            }
+          }
         }
       } catch (e) {
       }
@@ -655,5 +673,45 @@ var OcrProoferSettingTab = class extends import_obsidian.PluginSettingTab {
         await this.plugin.saveSettings();
       })
     );
+  }
+};
+function showConfirmModal(app, fileName) {
+  return new Promise((resolve) => {
+    new ConfirmModal(app, fileName, resolve).open();
+  });
+}
+var ConfirmModal = class extends import_obsidian.Modal {
+  constructor(app, fileName, onResolve) {
+    super(app);
+    this.resolved = false;
+    this.fileName = fileName;
+    this.onResolve = onResolve;
+  }
+  onOpen() {
+    const { contentEl } = this;
+    contentEl.createEl("h3", { text: "\u30CE\u30FC\u30C8\u306E\u518D\u8AAD\u307F\u8FBC\u307F\u78BA\u8A8D" });
+    contentEl.createEl("p", {
+      text: `\u300C${this.fileName}\u300D\u306F\u3059\u3067\u306B\u30D6\u30E9\u30A6\u30B6\u30BF\u30D6\u3067\u958B\u304B\u308C\u3066\u3044\u307E\u3059\u3002`
+    });
+    contentEl.createEl("p", {
+      text: "\u672A\u4FDD\u5B58\u306E\u5909\u66F4\u304C\u3042\u308B\u5834\u5408\u306F\u5931\u308F\u308C\u307E\u3059\u3002\u30BF\u30D6\u3092\u66F4\u65B0\u3057\u307E\u3059\u304B\uFF1F"
+    });
+    new import_obsidian.Setting(contentEl).addButton(
+      (btn) => btn.setButtonText("\u66F4\u65B0\u3059\u308B").setCta().onClick(() => {
+        this.resolved = true;
+        this.onResolve(true);
+        this.close();
+      })
+    ).addButton(
+      (btn) => btn.setButtonText("\u30AD\u30E3\u30F3\u30BB\u30EB").onClick(() => {
+        this.resolved = true;
+        this.onResolve(false);
+        this.close();
+      })
+    );
+  }
+  onClose() {
+    if (!this.resolved) this.onResolve(false);
+    this.contentEl.empty();
   }
 };

@@ -1,4 +1,4 @@
-import { App, Editor, ItemView, MarkdownView, Notice, Plugin, PluginSettingTab, Setting, TFile, WorkspaceLeaf } from 'obsidian';
+import { App, Editor, ItemView, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting, TFile, WorkspaceLeaf } from 'obsidian';
 import {
   DEFAULT_RESOLVER_SETTINGS,
   DefaultResolutionStrategy,
@@ -254,23 +254,45 @@ export default class OcrProoferPlugin extends Plugin {
     const newTabUrl = `${serverUrl}/?note=${encodeURIComponent(note)}`;
 
     if (this.settings.launchMode === 'always-new') {
-      // Same note already open? Reuse that tab instead of duplicating.
+      // Check if the same note is already open in a tab (without delivering yet).
       try {
-        const resp = await fetch(`${serverUrl}/api/bridge/open`, {
+        const checkResp = await fetch(`${serverUrl}/api/bridge/open`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             vault: this.app.vault.getName(),
             note,
             name: file.name,
-            mode: 'reuse-same-note',
+            mode: 'check-same-note',
           }),
         });
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-        const data: { delivered: boolean } = await resp.json();
-        if (data.delivered) {
-          new Notice('同じノートが既に開かれているタブに切り替えました。');
-          return;
+        if (checkResp.ok) {
+          const checkData: { found: boolean } = await checkResp.json();
+          if (checkData.found) {
+            // Same note is open — ask for confirmation before reloading the tab.
+            const confirmed = await showConfirmModal(this.app, file.name);
+            if (!confirmed) return;
+
+            // User confirmed — now deliver the switch event.
+            const resp = await fetch(`${serverUrl}/api/bridge/open`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                vault: this.app.vault.getName(),
+                note,
+                name: file.name,
+                mode: 'reuse-same-note',
+              }),
+            });
+            if (resp.ok) {
+              const data: { delivered: boolean } = await resp.json();
+              if (data.delivered) {
+                new Notice('同じノートが既に開かれているタブに切り替えました。');
+                return;
+              }
+            }
+            // Tab disappeared between check and deliver — fall through to new tab.
+          }
         }
       } catch {
         // bridge unreachable — fall through to new tab
@@ -513,5 +535,60 @@ class OcrProoferSettingTab extends PluginSettingTab {
             await this.plugin.saveSettings();
           }),
       );
+  }
+}
+
+// ── Confirmation modal ────────────────────────────────────────────────────────
+
+function showConfirmModal(app: App, fileName: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    new ConfirmModal(app, fileName, resolve).open();
+  });
+}
+
+class ConfirmModal extends Modal {
+  private fileName: string;
+  private onResolve: (confirmed: boolean) => void;
+  private resolved = false;
+
+  constructor(app: App, fileName: string, onResolve: (confirmed: boolean) => void) {
+    super(app);
+    this.fileName = fileName;
+    this.onResolve = onResolve;
+  }
+
+  onOpen(): void {
+    const { contentEl } = this;
+    contentEl.createEl('h3', { text: 'ノートの再読み込み確認' });
+    contentEl.createEl('p', {
+      text: `「${this.fileName}」はすでにブラウザタブで開かれています。`,
+    });
+    contentEl.createEl('p', {
+      text: '未保存の変更がある場合は失われます。タブを更新しますか？',
+    });
+    new Setting(contentEl)
+      .addButton((btn) =>
+        btn
+          .setButtonText('更新する')
+          .setCta()
+          .onClick(() => {
+            this.resolved = true;
+            this.onResolve(true);
+            this.close();
+          }),
+      )
+      .addButton((btn) =>
+        btn.setButtonText('キャンセル').onClick(() => {
+          this.resolved = true;
+          this.onResolve(false);
+          this.close();
+        }),
+      );
+  }
+
+  onClose(): void {
+    // ESC キーや × ボタンで閉じた場合もキャンセル扱い
+    if (!this.resolved) this.onResolve(false);
+    this.contentEl.empty();
   }
 }

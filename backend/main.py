@@ -231,6 +231,11 @@ async def bridge_open(payload: dict = Body(...)):
     data    = json.dumps({"vault": vault, "note": note, "name": name}, ensure_ascii=False)
     message = f"event: open-note\ndata: {data}\n\n"
 
+    if mode == "check-same-note":
+        # Check only — do not deliver. Plugin uses this to confirm before switching.
+        targets = [c for c in _bridge_clients.values() if c["note"] == note]
+        return {"found": len(targets) > 0}
+
     if mode == "reuse-same-note":
         targets = [c for c in _bridge_clients.values() if c["note"] == note]
         if not targets:
