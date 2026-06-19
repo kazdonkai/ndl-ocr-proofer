@@ -24,6 +24,14 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - **obsidian-plugin/README.md トラブルシューティングセクション追加**: 「Obsidianで開く」ボタンを押しても何も起きない場合の症状・原因候補（起動未確認 / Vault 名ミス）・確認手順・修正手順を追記。
 
+- **`always-new` モードで同一ノートの既存タブを再利用** (`obsidian-plugin/main.ts`): `always-new` モードで同じノートが既にブラウザタブで開かれている場合、新規タブを開かず既存タブを切り替える。Obsidian 上に確認ダイアログ（「タブを更新しますか？」）を表示し、ユーザーが承認した場合のみ再読み込みを実行する。キャンセル・ESC 閉じはすべて中止扱い。
+
+- **`reuse-existing` モードで切り替え前に確認ダイアログを表示** (`obsidian-plugin/main.ts`): アプリを初めて起動する場合（ブラウザタブが一枚も開いていない = `check-any: found=false`）は確認なしで新しいタブを開く。既存タブがある場合は「影印校エディタが既に開かれています。切り替えますか？」の確認ダイアログを Obsidian 上に表示し、承認後に SSE 切替イベントを配信する。
+
+- **`POST /api/obsidian/open` エンドポイントを追加** (`backend/main.py`): `obsidian://` URI を macOS の `open` コマンド経由で起動する。ブラウザに `window.location.href = 'obsidian://...'` を実行させると Chrome が `EventSource.close()` を呼び出し SSE 接続を永久切断するため、backend 経由で処理することでブラウザナビゲーションを回避する。
+
+- **`bridge_open` に check-only モードを追加** (`backend/main.py`): SSE を配信せず確認情報のみ返す 2 モードを追加。`check-any`（接続中タブの有無のみ確認 → `{"found": bool}`）・`check-same-note`（同一ノートを表示中のタブ有無のみ確認 → `{"found": bool}`）。
+
 ### Changed / 変更
 
 - **縦書きモードの疑義スパンマーカーを傍線に変更** (`frontend/src/components/Proofreader.css`): 縦書き表示時に疑義スパンのハイライトを従来の背景色＋下線から、文字右側の傍線（`border-right: 2px solid`）に切り替える。横書きモードの表示は変更なし。Vertical writing: suspect span marker changed to sidelining.
@@ -31,6 +39,12 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **`start.sh` バックエンド起動待機ロジックを改善** (`start.sh`): production・dev 両モードのバックエンド起動待機ループに、プロセス生存チェック（`kill -0`）を追加。大規模 Vault では起動時の初回インデックス（VaultReader）に最大 30 秒以上かかるため、待機上限を 10 秒から 60 秒に延長した。ポート未検知でもプロセスが生存している限り待機を継続し、プロセスが死亡した場合のみ即座にエラーを報告する。Improved backend startup wait in `start.sh`: added process liveness check and extended timeout to 60 s to prevent false timeout errors during large-Vault initial indexing.
 
 - **辞書管理画面を常時インライン編集モードに変更** (`frontend/src/components/DictionaryManager.jsx`): 従来の「編集ボタンで1行ずつ展開」方式を廃止し、全エントリを最初からインライン編集可能な状態で表示する。変更は「一括保存」ボタンで確定。`editingEntry` state を `editRows`（全行管理）に置き換え。
+
+### Fixed / バグ修正
+
+- **「Obsidianで開く」ボタンで複数ブラウザタブが際限なく増殖する問題を修正** (`backend/main.py`, `frontend/src/App.jsx`): `window.location.href = 'obsidian://...'` が Chrome の前処理で `EventSource.close()` を呼び出し SSE 接続を永久切断する問題。切断後に `bridge_open` が `delivered: false` を返すため plugin が新タブを開き、その新タブでも同様の事象が連鎖するカスケードを引き起こしていた。`window.location.href` を廃止し `POST /api/obsidian/open` 経由の `open` コマンド実行に変更することで根本解決。
+
+- **SSE 接続の切断・再接続タイミング問題を緩和** (`backend/main.py`): SSE ストリーム先頭に `retry: 300` を設定しブラウザ再接続を 300ms 以内に短縮。`bridge_open` で接続クライアントが 0 件の際に 500ms 待機リトライを追加し、瞬断後の空振りを低減した。
 
 ---
 
