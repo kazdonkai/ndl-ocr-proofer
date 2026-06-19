@@ -245,6 +245,20 @@ async def bridge_open(payload: dict = Body(...)):
     return {"delivered": True}
 
 
+@app.post("/api/obsidian/open")
+async def obsidian_open(payload: dict = Body(...)):
+    """obsidian:// URI を macOS の open コマンド経由で起動する。
+    ブラウザに window.location.href = 'obsidian://...' を実行させると
+    Chrome がページナビゲーションの前処理（EventSource.close()）を行い
+    SSE 接続が永久に切れるため、backend 経由で開くことで回避する。
+    """
+    uri = payload.get("uri", "")
+    if not isinstance(uri, str) or not uri.startswith("obsidian://"):
+        raise HTTPException(status_code=400, detail="obsidian:// URI のみ受け付けます")
+    await asyncio.create_subprocess_exec("open", uri)
+    return {"status": "ok"}
+
+
 @app.post("/api/bridge/current-note")
 async def bridge_set_current_note(payload: dict = Body(...)):
     """ブラウザタブが現在表示中の note を backend に通知する。

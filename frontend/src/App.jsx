@@ -439,7 +439,10 @@ function App() {
   };
 
   // ─── Open in Obsidian ────────────────────────────────────────────────────
-  const handleOpenInObsidian = () => {
+  // window.location.href = 'obsidian://...' causes Chrome to run page-unload
+  // preprocessing (EventSource.close()), permanently killing the SSE connection.
+  // Instead, POST the URI to the backend which opens it via macOS `open`.
+  const handleOpenInObsidian = async () => {
     if (!docId) {
       showToast('ノートが開かれていません');
       return;
@@ -454,7 +457,15 @@ function App() {
       showToast('Obsidian URI を生成できませんでした');
       return;
     }
-    window.location.href = uri;
+    try {
+      await fetch('/api/obsidian/open', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ uri }),
+      });
+    } catch {
+      showToast('Obsidian を開けませんでした');
+    }
   };
 
   // ─── Completion status ───────────────────────────────────────────────────
