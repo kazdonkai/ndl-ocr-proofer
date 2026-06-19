@@ -184,6 +184,9 @@ async def bridge_events():
 
     async def event_generator():
         try:
+            # retry: 300 — browser reconnects within 300 ms after disconnect.
+            # This narrows the window where bridge/open sees no clients.
+            yield f"retry: 300\n\n"
             yield f"event: connected\ndata: {json.dumps({'clientId': client_id})}\n\n"
             while True:
                 msg = await queue.get()
@@ -219,7 +222,11 @@ async def bridge_open(payload: dict = Body(...)):
     logger.info("[bridge] POST /open note=%s mode=%s clients=%d", note, mode, len(_bridge_clients))
 
     if not _bridge_clients:
-        return {"delivered": False}
+        # SSE may be momentarily reconnecting (e.g. after window.location.href for obsidian://).
+        # Wait up to 500 ms for a client to reappear before giving up.
+        await asyncio.sleep(0.5)
+        if not _bridge_clients:
+            return {"delivered": False}
 
     data    = json.dumps({"vault": vault, "note": note, "name": name}, ensure_ascii=False)
     message = f"event: open-note\ndata: {data}\n\n"
