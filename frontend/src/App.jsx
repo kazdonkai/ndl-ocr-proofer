@@ -454,7 +454,7 @@ function App() {
       showToast('Obsidian URI を生成できませんでした');
       return;
     }
-    window.location.href = uri;
+    window.open(uri);
   };
 
   // ─── Completion status ───────────────────────────────────────────────────
