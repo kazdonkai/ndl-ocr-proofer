@@ -8,6 +8,34 @@
 
 ---
 
+## Obsidian プラグインは 2 種類ある（混同厳禁）
+
+このプロジェクトに関連する Obsidian プラグインは **2 種類** 存在し、役割・ディレクトリが異なる。
+
+| | Bridge Plugin（現行） | Standalone Plugin（将来） |
+|--|--|--|
+| **役割** | Web app との SSE bridge | Obsidian ネイティブ移植版 |
+| **状態** | v1.1.4 リリース済み・稼働中 | 未実装（プレースホルダのみ） |
+| **リポジトリ内ソース** | `obsidian-plugin/` | **このリポジトリには存在しない** |
+| **Vault ディレクトリ** | `.obsidian/plugins/proofreading-bridge/` | `.obsidian/plugins/ocr-proofer/` |
+| **plugin ID** | `ocr-proofer`（manifest.json） | `ocr-proofer`（同じ、将来変更予定） |
+| **バージョン** | 1.1.4 | 0.1.0（プレースホルダ） |
+
+### 作業対象は必ず Bridge Plugin
+
+Claude が `obsidian-plugin/` や plugin / bridge に関する作業を行う際は、  
+**必ず `proofreading-bridge/` を参照すること。`ocr-proofer/` は別物。**
+
+- 正しい Vault ディレクトリ: `.obsidian/plugins/proofreading-bridge/`
+- 誤りやすいディレクトリ: `.obsidian/plugins/ocr-proofer/`（← Standalone の古いプレースホルダ）
+
+### 既知の問題
+
+両プラグインの `manifest.json` の `"id"` が `"ocr-proofer"` で重複している。  
+Standalone Plugin が本格実装される際には ID を変更する必要がある（例: `ocr-proofer-bridge` / `ocr-proofer-standalone`）。
+
+---
+
 ## ドキュメント役割分担
 
 | ドキュメント | 役割 |
